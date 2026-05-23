@@ -1,5 +1,5 @@
 // Export Manager - Handles JSON generation for SWT library
-import { downloadTextAsFile, showModal, copyToClipboard, showToast } from "./utils.js";
+import { downloadTextAsFile, showModal, copyToClipboard, showToast, sanitizeId } from "./utils.js";
 import { IconRenderer } from "../../IconRenderer.js";
 import { buildTourConfig } from "./data-transform.js";
 import { EditorEvents } from "./event-emitter.js";

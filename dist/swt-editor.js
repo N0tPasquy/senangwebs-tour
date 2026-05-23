@@ -198,7 +198,7 @@
     /**
      * Deep clone object
      */
-    function deepClone$1(obj) {
+    function deepClone(obj) {
         return JSON.parse(JSON.stringify(obj));
     }
 
@@ -206,7 +206,7 @@
         __proto__: null,
         copyToClipboard: copyToClipboard,
         debounce: debounce,
-        deepClone: deepClone$1,
+        deepClone: deepClone,
         downloadTextAsFile: downloadTextAsFile,
         formatFileSize: formatFileSize,
         generateId: generateId,
@@ -353,11 +353,12 @@
       /**
        * Start auto-save
        */
-      startAutoSave(callback) {
+      startAutoSave(callback, delay = null) {
         this.stopAutoSave();
+        const intervalDelay = delay !== null ? delay : this.autoSaveDelay;
         this.autoSaveInterval = setInterval(() => {
           callback();
-        }, this.autoSaveDelay);
+        }, intervalDelay);
       }
 
       /**
@@ -792,11 +793,11 @@
        */
       updateScene(index, property, value) {
         if (index >= 0 && index < this.scenes.length) {
+          const oldId = this.scenes[index].id;
           this.scenes[index][property] = value;
 
           // If updating ID, update all hotspot target references (uses nested action.target)
           if (property === "id") {
-            const oldId = this.scenes[index].id;
             this.scenes.forEach((scene) => {
               scene.hotspots.forEach((hotspot) => {
                 if (hotspot.action?.target === oldId) {
@@ -5026,7 +5027,7 @@
           const json = JSON.stringify(jsonData, null, 2);
 
           const title = this.editor.config.title || "tour";
-          const filename = sanitizeId(title) + ".json";
+          const filename = sanitizeId$1(title) + ".json";
           downloadTextAsFile(json, filename);
 
           showToast("Tour exported successfully", "success");
@@ -5107,7 +5108,7 @@
         try {
           const html = await this.generateViewerHTML();
           const title = this.editor.config.title || "tour";
-          const filename = sanitizeId(title) + "-viewer.html";
+          const filename = sanitizeId$1(title) + "-viewer.html";
 
           downloadTextAsFile(html, filename);
 
@@ -5719,14 +5720,14 @@
                 
                 const pos = hotspot.position;
                 const distance = Math.sqrt(pos.x * pos.x + pos.y * pos.y + pos.z * pos.z);
-                if (distance > 10) {
-                    const scale = 10 / distance;
+                if (distance > 5) {
+                    const scale = 5 / distance;
                     pos.x *= scale;
                     pos.y *= scale;
                     pos.z *= scale;
                     
                     document.getElementById(`hotspotPos${axis.toUpperCase()}`).value = pos[axis].toFixed(2);
-                    showToast('Position clamped to 10-unit radius', 'info');
+                    showToast('Position clamped to 5-unit radius', 'info');
                 }
                 
                 await this.previewController.updateHotspotMarker(index);

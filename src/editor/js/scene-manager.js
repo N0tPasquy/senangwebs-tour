@@ -121,11 +121,11 @@ class SceneManagerEditor {
    */
   updateScene(index, property, value) {
     if (index >= 0 && index < this.scenes.length) {
+      const oldId = this.scenes[index].id;
       this.scenes[index][property] = value;
 
       // If updating ID, update all hotspot target references (uses nested action.target)
       if (property === "id") {
-        const oldId = this.scenes[index].id;
         this.scenes.forEach((scene) => {
           scene.hotspots.forEach((hotspot) => {
             if (hotspot.action?.target === oldId) {

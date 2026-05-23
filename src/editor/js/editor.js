@@ -576,14 +576,14 @@ class TourEditor {
             
             const pos = hotspot.position;
             const distance = Math.sqrt(pos.x * pos.x + pos.y * pos.y + pos.z * pos.z);
-            if (distance > 10) {
-                const scale = 10 / distance;
+            if (distance > 5) {
+                const scale = 5 / distance;
                 pos.x *= scale;
                 pos.y *= scale;
                 pos.z *= scale;
                 
                 document.getElementById(`hotspotPos${axis.toUpperCase()}`).value = pos[axis].toFixed(2);
-                showToast('Position clamped to 10-unit radius', 'info');
+                showToast('Position clamped to 5-unit radius', 'info');
             }
             
             await this.previewController.updateHotspotMarker(index);

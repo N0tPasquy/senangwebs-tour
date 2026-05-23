@@ -131,11 +131,12 @@ class ProjectStorageManager {
   /**
    * Start auto-save
    */
-  startAutoSave(callback) {
+  startAutoSave(callback, delay = null) {
     this.stopAutoSave();
+    const intervalDelay = delay !== null ? delay : this.autoSaveDelay;
     this.autoSaveInterval = setInterval(() => {
       callback();
-    }, this.autoSaveDelay);
+    }, intervalDelay);
   }
 
   /**

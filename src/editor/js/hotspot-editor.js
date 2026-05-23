@@ -1,5 +1,5 @@
 // Hotspot Editor - Handles hotspot placement and editing
-import { generateId, showToast } from './utils.js';
+import { generateId, showToast, deepClone } from './utils.js';
 
 class HotspotEditor {
     constructor(editor) {
