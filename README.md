@@ -123,7 +123,7 @@ A powerful, data-driven 360° virtual tour system built on A-Frame WebVR. Create
       scene.addEventListener("loaded", () => {
         const tour = new SWT.Tour(scene, config);
         tour.addEventListener("scene-loaded", (e) => {
-          console.log("Now viewing:", e.detail.sceneName);
+          console.log("Now viewing:", e.detail.sceneId);
         });
         tour.start();
       });
@@ -340,9 +340,11 @@ Both the editor and viewer use the same data format. Scenes are stored as an **a
 
 ##### `tour.start()`
 
-Initialize and start the tour. Loads the initial scene and sets up event listeners.
+Initialize and start the tour. Loads the initial scene and sets up internal event
+listeners. Calling it again restarts the tour from `initialScene`; it also works
+after `tour.destroy()`.
 
-**Returns:** `void`
+**Returns:** `Promise<void>`
 
 **Example:**
 
@@ -361,7 +363,7 @@ Navigate to a specific scene by ID.
 
 - `sceneId` (String) - Target scene ID (must exist in `scenes` object)
 
-**Returns:** `void`
+**Returns:** `Promise<void>`
 
 **Example:**
 
@@ -388,7 +390,9 @@ console.log("Viewing:", currentScene); // "living-room"
 
 ##### `tour.destroy()`
 
-Clean up and remove the tour. Removes all hotspots, event listeners, and resets scene.
+Clean up and remove the tour. Removes all hotspots, internal event listeners, and
+managed assets, then resets the current scene. It is safe to call more than once.
+The same instance can be started again with `tour.start()`.
 
 **Returns:** `void`
 
@@ -415,7 +419,7 @@ Listen to tour events. Custom event system (not DOM events).
 
 ```javascript
 tour.addEventListener("scene-loaded", (event) => {
-  console.log("Scene:", event.detail.sceneName);
+  console.log("Scene:", event.detail.sceneId);
 });
 ```
 
@@ -433,7 +437,7 @@ Fired when `tour.start()` is called.
 
 ```javascript
 {
-  config: Object; // Full tour configuration
+  sceneId: String; // Initial scene ID
 }
 ```
 
@@ -461,8 +465,7 @@ Fired after a scene is fully loaded and rendered.
 
 ```javascript
 {
-  sceneId: String,   // ID of loaded scene
-  sceneName: String  // Display name of scene
+  sceneId: String; // ID of loaded scene
 }
 ```
 
@@ -476,9 +479,8 @@ Fired when a hotspot is clicked/activated.
 
 ```javascript
 {
-  hotspotId: String,     // Hotspot ID
-  sceneId: String,       // Current scene ID
-  action: Object         // Hotspot action object { type, target }
+  hotspotData: Object, // Full hotspot configuration
+  sceneId: String;     // Current scene ID
 }
 ```
 
@@ -513,7 +515,7 @@ const tour = new SWT.Tour(scene, {
 
 // Listen to events
 tour.addEventListener("tour-started", (e) => {
-  console.log("Tour configuration:", e.detail.config);
+  console.log("Tour started at:", e.detail.sceneId);
 });
 
 tour.addEventListener("scene-loading", (e) => {
@@ -522,13 +524,13 @@ tour.addEventListener("scene-loading", (e) => {
 });
 
 tour.addEventListener("scene-loaded", (e) => {
-  console.log("Loaded:", e.detail.sceneName);
+  console.log("Loaded:", e.detail.sceneId);
   // Hide loading indicator
 });
 
 tour.addEventListener("hotspot-activated", (e) => {
-  console.log("Hotspot clicked:", e.detail.hotspotId);
-  console.log("Navigating to:", e.detail.action.target);
+  console.log("Hotspot clicked:", e.detail.hotspotData.id);
+  console.log("Navigating to:", e.detail.hotspotData.action.target);
 });
 
 // Start the tour

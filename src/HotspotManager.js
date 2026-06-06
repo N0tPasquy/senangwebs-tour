@@ -15,9 +15,8 @@ export class HotspotManager {
     this.currentAssetPrefix = ''; // Current asset ID prefix for this scene load
     
     // Listen for hover events
-    this.sceneEl.addEventListener('swt-hotspot-hover', (evt) => {
-      this.handleHotspotHover(evt.detail);
-    });
+    this.boundHandleHotspotHover = this.handleHotspotHover.bind(this);
+    this.sceneEl.addEventListener('swt-hotspot-hover', this.boundHandleHotspotHover);
   }
 
   /**
@@ -258,6 +257,7 @@ export class HotspotManager {
    * Clean up the hotspot manager
    */
   destroy() {
+    this.sceneEl.removeEventListener('swt-hotspot-hover', this.boundHandleHotspotHover);
     this.removeAllHotspots();
     if (this.tooltipEl && this.tooltipEl.parentNode) {
       this.tooltipEl.parentNode.removeChild(this.tooltipEl);

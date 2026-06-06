@@ -56133,9 +56133,8 @@ void main() {
 	    this.currentAssetPrefix = ''; // Current asset ID prefix for this scene load
 	    
 	    // Listen for hover events
-	    this.sceneEl.addEventListener('swt-hotspot-hover', (evt) => {
-	      this.handleHotspotHover(evt.detail);
-	    });
+	    this.boundHandleHotspotHover = this.handleHotspotHover.bind(this);
+	    this.sceneEl.addEventListener('swt-hotspot-hover', this.boundHandleHotspotHover);
 	  }
 
 	  /**
@@ -56376,6 +56375,7 @@ void main() {
 	   * Clean up the hotspot manager
 	   */
 	  destroy() {
+	    this.sceneEl.removeEventListener('swt-hotspot-hover', this.boundHandleHotspotHover);
 	    this.removeAllHotspots();
 	    if (this.tooltipEl && this.tooltipEl.parentNode) {
 	      this.tooltipEl.parentNode.removeChild(this.tooltipEl);
@@ -56531,11 +56531,20 @@ void main() {
 	    this.sceneEl = aframeSceneEl;
 	    this.config = tourConfig;
 	    this.isStarted = false;
+	    this.isDestroyed = false;
 
 	    // Normalize scenes to array format (backward compatibility with object format)
 	    this.scenesArray = this.normalizeScenesArray(tourConfig.scenes);
 
-	    // Initialize managers
+	    this.boundHandleHotspotClick = this.handleHotspotClick.bind(this);
+	    this.initializeRuntime();
+	  }
+
+	  /**
+	   * Initialize managers and internal event listeners.
+	   * Allows a destroyed tour instance to be started again.
+	   */
+	  initializeRuntime() {
 	    this.assetManager = new AssetManager(this.sceneEl);
 	    this.sceneManager = new SceneManager(this.sceneEl, this.assetManager);
 	    this.iconRenderer = new IconRenderer();
@@ -56548,8 +56557,6 @@ void main() {
 	      this.iconRenderer
 	    );
 
-	    // Event listeners
-	    this.boundHandleHotspotClick = this.handleHotspotClick.bind(this);
 	    this.sceneEl.addEventListener(
 	      "swt-hotspot-clicked",
 	      this.boundHandleHotspotClick
@@ -56557,6 +56564,7 @@ void main() {
 
 	    // Ensure cursor exists for interaction
 	    this.ensureCursor();
+	    this.isDestroyed = false;
 	  }
 
 	  /**
@@ -56624,9 +56632,10 @@ void main() {
 	    if (this.isStarted) {
 	      console.warn("Tour already started, cleaning up and restarting...");
 	      this.destroy();
-	      // Re-initialize necessary parts that destroy() cleaned up
-	      this.isStarted = false;
-	      // We don't return here, we proceed to start again
+	    }
+
+	    if (this.isDestroyed) {
+	      this.initializeRuntime();
 	    }
 
 	    const initialSceneId = this.config.initialScene;
@@ -56829,6 +56838,10 @@ void main() {
 	   * Destroy the tour and clean up resources
 	   */
 	  destroy() {
+	    if (this.isDestroyed) {
+	      return;
+	    }
+
 	    // Remove event listeners
 	    this.sceneEl.removeEventListener(
 	      "swt-hotspot-clicked",
@@ -56846,6 +56859,7 @@ void main() {
 	    }
 
 	    this.isStarted = false;
+	    this.isDestroyed = true;
 	  }
 	}
 
