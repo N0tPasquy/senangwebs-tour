@@ -1,7 +1,7 @@
 ---
 name: senangwebs-tour
 description: A-Frame based 360-degree virtual tour system with a visual no-code editor and a lightweight embeddable viewer.
-version: 1.0.19
+version: 1.0.20
 package: senangwebs-tour
 ---
 
