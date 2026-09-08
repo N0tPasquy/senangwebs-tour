@@ -1,8 +1,9 @@
 // Export Manager - Handles JSON generation for SWT library
-import { downloadTextAsFile, showModal, copyToClipboard, showToast, sanitizeId } from "./utils.js";
+import { downloadTextAsFile, showModal, copyToClipboard, showToast, sanitizeId, deepClone, escapeHtml, safeJsonStringify } from "./utils.js";
 import { IconRenderer } from "../../IconRenderer.js";
 import { buildTourConfig } from "./data-transform.js";
 import { EditorEvents } from "./event-emitter.js";
+import packageInfo from "../../../package.json";
 
 class ExportManager {
   constructor(editor) {
@@ -41,12 +42,20 @@ class ExportManager {
       const scenes = tourData.scenes || [];
       this.editor.sceneManager.loadScenes(scenes);
 
-      // Set initial scene in config
-      if (tourData.initialScene) {
-        this.editor.config.initialSceneId = tourData.initialScene;
+      // Set initial scene in config (accepts both initialSceneId and initialScene)
+      const requestedInitialScene =
+        (tourData.config && tourData.config.initialSceneId) ||
+        tourData.initialSceneId ||
+        tourData.initialScene;
+      if (requestedInitialScene && this.editor.sceneManager.getSceneById(requestedInitialScene)) {
+        this.editor.config.initialSceneId = requestedInitialScene;
       } else if (scenes.length > 0) {
         this.editor.config.initialSceneId = scenes[0].id;
       }
+
+      // Reset preview and selection state so the new project renders cleanly
+      this.editor.hotspotEditor.currentHotspotIndex = -1;
+      this.editor.lastRenderedSceneIndex = -1;
 
       // Mark as having unsaved changes
       this.editor.hasUnsavedChanges = true;
@@ -72,17 +81,18 @@ class ExportManager {
    * This ensures the exported HTML doesn't need the SenangStart icons library
    */
   async generateJSONWithBakedIcons() {
-    const jsonData = this.generateJSON();
+    // Deep-clone so baked icons never modify the live editor project state
+    const jsonData = deepClone(this.generateJSON());
     
-    // Process all scenes in parallel
-    const scenePromises = jsonData.scenes.map(async (scene) => {
-      // Process all hotspots in this scene in parallel
-      const hotspotPromises = scene.hotspots.map(async (hotspot) => {
+    // Process icons SEQUENTIALLY: IconRenderer uses a single shared render
+    // container, so parallel generation would corrupt captured icons.
+    for (const scene of jsonData.scenes) {
+      for (const hotspot of scene.hotspots) {
         const icon = hotspot.appearance?.icon;
         
         // Skip if no icon or if it's already a data URL or URL
-        if (!icon) return;
-        if (icon.startsWith('data:') || icon.startsWith('http') || icon.startsWith('/')) return;
+        if (!icon) continue;
+        if (icon.startsWith('data:') || icon.startsWith('http') || icon.startsWith('/')) continue;
         
         // Generate SVG data URL from icon name
         try {
@@ -94,12 +104,9 @@ class ExportManager {
         } catch (err) {
           console.warn(`Failed to bake icon "${icon}" for export:`, err);
         }
-      });
-      
-      await Promise.all(hotspotPromises);
-    });
+      }
+    }
     
-    await Promise.all(scenePromises);
     return jsonData;
   }
 
@@ -151,7 +158,11 @@ class ExportManager {
    */
   async generateViewerHTML() {
     const jsonData = await this.generateJSONWithBakedIcons();
-    const title = this.editor.config.title || "Virtual Tour";
+    const rawTitle = this.editor.config.title || "Virtual Tour";
+    // Escape for the HTML <title> context
+    const title = escapeHtml(rawTitle);
+    // Pin the runtime version so exported viewers are reproducible
+    const runtimeVersion = packageInfo.version;
 
     return `<!DOCTYPE html>
 <html lang="en">
@@ -159,7 +170,7 @@ class ExportManager {
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>${title}</title>
-    <script src="https://unpkg.com/senangwebs-tour@latest/dist/swt.min.js"></script>
+    <script src="https://unpkg.com/senangwebs-tour@${runtimeVersion}/dist/swt.min.js"></script>
   </head>
   <body>
     <a-scene id="tour-container">
@@ -170,7 +181,8 @@ class ExportManager {
 
     <script>
       // Tour configuration
-      const tourConfig = ${JSON.stringify(jsonData, null, 8)
+      // Serialized with <, >, & escaped so the data cannot break out of this script
+      const tourConfig = ${safeJsonStringify(jsonData, 8)
         .split("\n")
         .map((line, i) => (i === 0 ? line : "      " + line))
         .join("\n")};

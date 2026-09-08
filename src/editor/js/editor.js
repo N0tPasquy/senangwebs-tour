@@ -15,6 +15,8 @@ class TourEditor {
             sceneListElement: options.sceneListElement || null,
             previewElement: options.previewElement || null,
             propertiesElement: options.propertiesElement || null,
+            hotspotListElement: options.hotspotListElement || null,
+            containerElement: options.containerElement || null,
             autoSave: options.autoSave !== undefined ? options.autoSave : false,
             autoSaveInterval: options.autoSaveInterval || 30000,
             ...options
@@ -33,6 +35,23 @@ class TourEditor {
         
         // Initialize event emitter
         this.events = new EventEmitter();
+    }
+
+    /**
+     * Query an element by ID, scoped to the editor container when one was
+     * supplied, falling back to the document.
+     * @param {string} id - Element ID
+     * @returns {Element|null}
+     */
+    getScopedElement(id) {
+        const root = this.options.containerElement;
+        if (root) {
+            const scoped = root.querySelector(`#${id}`);
+            if (scoped) {
+                return scoped;
+            }
+        }
+        return document.getElementById(id);
     }
 
     /**
@@ -582,7 +601,10 @@ class TourEditor {
                 pos.y *= scale;
                 pos.z *= scale;
                 
-                document.getElementById(`hotspotPos${axis.toUpperCase()}`).value = pos[axis].toFixed(2);
+                const posInput = document.getElementById(`hotspotPos${axis.toUpperCase()}`);
+                if (posInput) {
+                    posInput.value = pos[axis].toFixed(2);
+                }
                 showToast('Position clamped to 5-unit radius', 'info');
             }
             
@@ -757,6 +779,7 @@ class TourEditor {
         if (projectData) {
             this.config = projectData.config || this.config;
             this.sceneManager.loadScenes(projectData.scenes || []);
+            this.lastRenderedSceneIndex = -1;
             this.hasUnsavedChanges = false;
             this.render();
             showToast('Project loaded', 'success');
@@ -768,21 +791,25 @@ class TourEditor {
 
     /**
      * New project
+     * Confirms once before modifying any state; cancellation leaves
+     * configuration, scenes, and unsaved-state untouched.
      */
     newProject() {
-        if (this.hasUnsavedChanges) {
-            if (!confirm('You have unsaved changes. Create new project?')) {
-                return false;
-            }
+        const hasScenes = this.sceneManager.getScenes().length > 0;
+        if ((this.hasUnsavedChanges || hasScenes) &&
+            !confirm('You have unsaved changes. Create new project?')) {
+            return false;
         }
 
+        // Confirmed - now commit the reset
         this.config = {
             title: 'My Virtual Tour',
             description: '',
             initialSceneId: ''
         };
         
-        this.sceneManager.clearScenes();
+        this.sceneManager.resetScenes();
+        this.lastRenderedSceneIndex = -1;
         this.hasUnsavedChanges = false;
         this.render();
         
@@ -803,15 +830,21 @@ const importUpload = document.getElementById('importUpload');
 
     /**
      * Handle import file
+     * Validates and normalizes imported data (both exported tour JSON with
+     * `initialScene` and editor project files with `config.initialSceneId`)
+     * before replacing project state.
      */
     async handleImportFile(file) {
         try {
             this.uiController.setLoading(true);
             
-            const projectData = await this.storageManager.importFromFile(file);
+            const importedData = await this.storageManager.importFromFile(file);
+            const projectData = this.normalizeImportedData(importedData);
             
-            this.config = projectData.config || projectData;
+            this.config = projectData.config;
             this.sceneManager.loadScenes(projectData.scenes || []);
+            this.lastRenderedSceneIndex = -1;
+            this.hotspotEditor.currentHotspotIndex = -1;
             this.hasUnsavedChanges = true;
             
             this.render();
@@ -822,7 +855,55 @@ const importUpload = document.getElementById('importUpload');
         } catch (error) {
             this.uiController.setLoading(false);
             console.error('Import failed:', error);
+            showToast('Invalid or corrupt project file', 'error');
         }
+    }
+
+    /**
+     * Validate and normalize imported tour data into editor project format
+     * @param {Object} data - Raw imported data
+     * @returns {Object} Normalized project data: { config, scenes }
+     */
+    normalizeImportedData(data) {
+        if (!data || typeof data !== 'object') {
+            throw new Error('Invalid project data');
+        }
+
+        // Accept both editor project files ({ config: { initialSceneId }, scenes })
+        // and exported tour JSON ({ initialScene, scenes })
+        const scenes = Array.isArray(data.scenes) ? data.scenes : [];
+        if (scenes.length === 0) {
+            throw new Error('No scenes found in project data');
+        }
+
+        // Validate each scene has id and a panorama
+        const validScenes = scenes.filter(
+            (scene) => scene && typeof scene === 'object' && scene.id &&
+                (scene.panorama || scene.imageUrl)
+        );
+        if (validScenes.length === 0) {
+            throw new Error('No valid scenes found in project data');
+        }
+
+        let initialSceneId = '';
+        if (data.config && typeof data.config === 'object') {
+            initialSceneId = data.config.initialSceneId || '';
+        } else if (data.initialScene) {
+            initialSceneId = data.initialScene;
+        }
+        // Keep the imported starting scene only if it still exists after import
+        if (!validScenes.some((scene) => scene.id === initialSceneId)) {
+            initialSceneId = validScenes[0].id;
+        }
+
+        return {
+            config: {
+                title: (data.config && data.config.title) || data.title || 'My Virtual Tour',
+                description: (data.config && data.config.description) || data.description || '',
+                initialSceneId
+            },
+            scenes: validScenes
+        };
     }
 
     /**

@@ -74,10 +74,13 @@ async function loadImageAsDataUrl(file) {
 }
 
 /**
- * Show toast notification
+ * Show toast notification (no-op when no toast element exists)
  */
 function showToast(message, type = 'info', duration = 3000) {
     const toast = document.getElementById('toast');
+    if (!toast) {
+        return;
+    }
     toast.textContent = message;
     toast.className = `toast ${type}`;
     toast.classList.add('show');
@@ -85,6 +88,31 @@ function showToast(message, type = 'info', duration = 3000) {
     setTimeout(() => {
         toast.classList.remove('show');
     }, duration);
+}
+
+/**
+ * Escape a string for safe interpolation into an HTML text/attribute context
+ */
+function escapeHtml(str) {
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+/**
+ * Serialize JSON for safe embedding inside a <script> block.
+ * Neutralizes </script> breakouts and HTML delimiters by escaping
+ * <, >, &, U+2028 and U+2029 in the serialized output.
+ */
+function safeJsonStringify(data, indent) {
+    return JSON.stringify(data, null, indent)
+        .replace(/</g, '\\u003c')
+        .replace(/>/g, '\\u003e')
+        .replace(/\u2028/g, '\\u2028')
+        .replace(/\u2029/g, '\\u2029');
 }
 
 /**
@@ -214,5 +242,7 @@ export {
     positionToString,
     parsePosition,
     isValidEmail,
-    deepClone
+    deepClone,
+    escapeHtml,
+    safeJsonStringify
 };

@@ -203,7 +203,7 @@ const exportManager = new ExportManager();
 
 ```javascript
 // Set up editor with your custom DOM elements
-editor.initialize({
+editor.init({
   sceneListElement: document.getElementById("scene-list"),
   previewElement: document.getElementById("preview-area"),
   propertiesElement: document.getElementById("properties-panel"),
@@ -213,19 +213,20 @@ editor.initialize({
 ### Step 3: Add Event Handlers
 
 ```javascript
-// Listen to editor events
-editor.addEventListener("scene-added", (e) => {
-  console.log("Scene added:", e.detail.scene);
+// Subscribe to editor events via the event emitter (EditorEvents is a
+// global map of event names exposed by swt-editor.js)
+editor.on(EditorEvents.SCENE_ADD, (e) => {
+  console.log("Scene added:", e.scene);
   // Update your custom UI
 });
 
-editor.addEventListener("hotspot-placed", (e) => {
-  console.log("Hotspot placed:", e.detail.position);
+editor.on(EditorEvents.HOTSPOT_ADD, (e) => {
+  console.log("Hotspot placed:", e.position);
   // Handle hotspot placement in your UI
 });
 
-editor.addEventListener("scene-loaded", (e) => {
-  console.log("Scene loaded:", e.detail.sceneId);
+editor.on(EditorEvents.PREVIEW_SCENE_CHANGE, (e) => {
+  console.log("Scene loaded:", e.sceneId);
   // Update preview state
 });
 ```

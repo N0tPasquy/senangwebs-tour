@@ -16,15 +16,23 @@
  * @returns {Object} Complete tour config
  */
 export function buildTourConfig(config, scenes) {
-  // Determine initial scene
+  const sceneList = scenes || [];
+
+  // Validate the initial-scene reference; fall back to the first scene
   let initialScene = config.initialSceneId;
-  if (!initialScene && scenes && scenes.length > 0) {
-    initialScene = scenes[0].id;
+  const initialSceneExists = initialScene && sceneList.some((s) => s.id === initialScene);
+  if (!initialSceneExists) {
+    if (initialScene) {
+      console.warn(
+        `Initial scene "${initialScene}" not found in scenes; falling back to first scene`
+      );
+    }
+    initialScene = sceneList.length > 0 ? sceneList[0].id : '';
   }
 
   return {
     initialScene: initialScene,
-    scenes: scenes || [],
+    scenes: sceneList,
   };
 }
 

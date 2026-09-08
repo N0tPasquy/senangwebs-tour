@@ -83,11 +83,13 @@ export class AssetManager {
       
       // Add cache-busting parameter to force fresh fetch with CORS headers
       // This prevents browser from using cached non-CORS responses
-      // Skip for data URLs since they don't support query parameters
+      // Only apply to plain http(s) URLs without a query string: data: and
+      // blob: URLs don't support query parameters, and URLs that already have
+      // a query string may be signed/served URLs whose signature must be
+      // preserved exactly.
       let finalUrl = url;
-      if (!url.startsWith('data:')) {
-        const separator = url.includes('?') ? '&' : '?';
-        finalUrl = `${url}${separator}_cors=1`;
+      if (/^https?:/i.test(url) && !url.includes('?')) {
+        finalUrl = `${url}?_cors=1`;
       }
       imgEl.setAttribute('src', finalUrl);
 
@@ -112,8 +114,18 @@ export class AssetManager {
    * @returns {Promise} - Resolves when the asset is loaded
    */
   async preloadVideo(url, id) {
-    if (this.loadedAssets.has(id)) {
-      return Promise.resolve(this.loadedAssets.get(id));
+    const existingAsset = this.loadedAssets.get(id);
+    if (existingAsset) {
+      const existingSrc = existingAsset.getAttribute('src');
+      if (existingSrc === url) {
+        // Same URL, return cached asset
+        return Promise.resolve(existingAsset);
+      }
+      // URL changed - remove old asset and create new one
+      if (existingAsset.parentNode) {
+        existingAsset.parentNode.removeChild(existingAsset);
+      }
+      this.loadedAssets.delete(id);
     }
 
     // Ensure assets element is ready
@@ -152,13 +164,23 @@ export class AssetManager {
   }
 
   /**
-   * Check if asset is a video based on URL
+   * Check if asset is a video based on URL.
+   * Parses the URL path (ignoring query strings/hash) for the extension.
+   * For blob:/data: URLs where no extension is available, callers should
+   * supply an explicit media type (e.g. scene.mediaType === 'video').
    * @param {string} url - Asset URL
    * @returns {boolean}
    */
   isVideo(url) {
+    if (!url || typeof url !== 'string') return false;
     const videoExtensions = ['.mp4', '.webm', '.ogg', '.ogv'];
-    return videoExtensions.some(ext => url.toLowerCase().endsWith(ext));
+    try {
+      const path = new URL(url, window.location.href).pathname.toLowerCase();
+      return videoExtensions.some((ext) => path.endsWith(ext));
+    } catch (err) {
+      // URL parsing failed - fall back to checking the raw string
+      return videoExtensions.some((ext) => url.toLowerCase().endsWith(ext));
+    }
   }
 
   /**

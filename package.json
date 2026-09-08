@@ -1,9 +1,21 @@
 {
   "name": "senangwebs-tour",
-  "version": "1.0.19",
+  "version": "1.0.20",
   "type": "module",
   "description": "VR 360° virtual tour system with visual editor and viewer library",
-  "main": "dist/swt.js",
+  "main": "dist/swt.cjs",
+  "module": "dist/swt.esm.js",
+  "browser": "dist/swt.js",
+  "exports": {
+    ".": {
+      "import": "./dist/swt.esm.js",
+      "require": "./dist/swt.cjs",
+      "browser": "./dist/swt.js",
+      "default": "./dist/swt.js"
+    },
+    "./dist/*": "./dist/*",
+    "./package.json": "./package.json"
+  },
   "files": [
     "dist/",
     "src/"
@@ -26,9 +38,10 @@
   "devDependencies": {
     "@rollup/plugin-json": "^6.1.0",
     "@rollup/plugin-node-resolve": "^15.2.3",
-    "@rollup/plugin-terser": "^0.4.4",
+    "@rollup/plugin-terser": "^1.0.0",
     "@rollup/plugin-virtual": "^3.0.2",
     "concat-with-sourcemaps": "^1.1.0",
+    "http-server": "^14.1.1",
     "postcss-import": "^16.1.1",
     "rollup": "^4.9.6",
     "rollup-plugin-postcss": "^4.0.2",

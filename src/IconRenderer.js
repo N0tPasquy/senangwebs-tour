@@ -8,6 +8,27 @@ export class IconRenderer {
   }
 
   /**
+   * Validate an icon name (icon names are slugs such as 'arrow-right').
+   * Rejects anything that could break out of an attribute or inject markup.
+   * @param {string} iconName
+   * @returns {boolean}
+   */
+  isValidIconName(iconName) {
+    return typeof iconName === 'string' && /^[a-z0-9][a-z0-9_-]*$/i.test(iconName);
+  }
+
+  /**
+   * Validate a color value (hex, rgb(), hsl(), or simple named colors).
+   * Rejects values containing quotes, semicolons, braces, or other markup.
+   * @param {string} color
+   * @returns {boolean}
+   */
+  isValidColor(color) {
+    if (typeof color !== 'string' || color.length > 64) return false;
+    return /^#[0-9a-f]{3,8}$|^rgba?\([\d\s.,%]+\)$|^hsla?\([\d\s.,%]+\)$|^[a-z]+$/i.test(color.trim());
+  }
+
+  /**
    * Initialize the hidden render container
    */
   init() {
@@ -41,30 +62,42 @@ export class IconRenderer {
       return this.iconCache.get(cacheKey);
     }
 
+    // Reject unsafe icon names and colors before any rendering happens
+    if (!this.isValidIconName(iconName)) {
+      console.warn(`Invalid icon name "${iconName}", skipping icon render`);
+      return null;
+    }
+    if (!this.isValidColor(color)) {
+      console.warn(`Invalid color "${color}", skipping icon render`);
+      return null;
+    }
+
     this.init();
 
-    return new Promise((resolve, reject) => {
-      // Create the ss-icon element
-      this.renderContainer.innerHTML = `
-        <ss-icon 
-          icon="${iconName}" 
-          thickness="2.5" 
-          style="color: ${color}; width: ${size}px; height: ${size}px; display: block;"
-        ></ss-icon>
-      `;
+    // Create the ss-icon element with DOM APIs (no HTML string interpolation)
+    this.renderContainer.innerHTML = '';
+    const ssIcon = document.createElement('ss-icon');
+    ssIcon.setAttribute('icon', iconName);
+    ssIcon.setAttribute('thickness', '2.5');
+    ssIcon.style.color = color;
+    ssIcon.style.width = `${size}px`;
+    ssIcon.style.height = `${size}px`;
+    ssIcon.style.display = 'block';
+    this.renderContainer.appendChild(ssIcon);
 
+    return new Promise((resolve) => {
       // Wait for the custom element to render
       setTimeout(() => {
         try {
-          const ssIcon = this.renderContainer.querySelector('ss-icon');
-          if (!ssIcon || !ssIcon.shadowRoot) {
+          const renderedIcon = this.renderContainer.querySelector('ss-icon');
+          if (!renderedIcon || !renderedIcon.shadowRoot) {
             console.warn(`Icon ${iconName} not rendered properly`);
             resolve(null);
             return;
           }
 
           // Get the SVG from shadow root
-          const svg = ssIcon.shadowRoot.querySelector('svg');
+          const svg = renderedIcon.shadowRoot.querySelector('svg');
           if (!svg) {
             console.warn(`SVG not found for icon ${iconName}`);
             resolve(null);

@@ -34,7 +34,9 @@ class SceneManagerEditor {
         const imageDataUrl = await loadImageAsDataUrl(fileOrConfig);
 
         scene = {
-          id: sanitizeId(fileOrConfig.name.replace(/\.[^/.]+$/, "")),
+          id: this.ensureUniqueSceneId(
+            sanitizeId(fileOrConfig.name.replace(/\.[^/.]+$/, ""))
+          ),
           name: fileOrConfig.name.replace(/\.[^/.]+$/, ""),
           panorama: imageDataUrl,
           thumbnail: thumbnail,
@@ -43,7 +45,9 @@ class SceneManagerEditor {
       } else if (typeof fileOrConfig === "object" && fileOrConfig !== null) {
         // Handle config object - support both panorama and imageUrl for backward compatibility
         scene = {
-          id: fileOrConfig.id || sanitizeId(`scene-${Date.now()}`),
+          id: this.ensureUniqueSceneId(
+            fileOrConfig.id || sanitizeId(`scene-${Date.now()}`)
+          ),
           name: fileOrConfig.name || "Untitled Scene",
           panorama: fileOrConfig.panorama || fileOrConfig.imageUrl || "",
           thumbnail: fileOrConfig.thumbnail || fileOrConfig.panorama || fileOrConfig.imageUrl || "",
@@ -66,6 +70,23 @@ class SceneManagerEditor {
   }
 
   /**
+   * Ensure a scene ID is unique across all scenes.
+   * Appends an incremental suffix when the ID is already taken.
+   * @param {string} id - Desired scene ID
+   * @returns {string} A unique scene ID
+   */
+  ensureUniqueSceneId(id) {
+    if (!this.getSceneById(id)) {
+      return id;
+    }
+    let counter = 2;
+    while (this.getSceneById(`${id}_${counter}`)) {
+      counter++;
+    }
+    return `${id}_${counter}`;
+  }
+
+  /**
    * Remove scene by index
    */
   removeScene(index) {
@@ -78,6 +99,20 @@ class SceneManagerEditor {
       }
 
       this.scenes.splice(index, 1);
+
+      // Clean up dangling references to the deleted scene
+      const deletedId = scene.id;
+      this.scenes.forEach((remainingScene) => {
+        remainingScene.hotspots.forEach((hotspot) => {
+          if (hotspot.action?.target === deletedId) {
+            hotspot.action.target = "";
+          }
+        });
+      });
+      if (this.editor.config.initialSceneId === deletedId) {
+        this.editor.config.initialSceneId =
+          this.scenes.length > 0 ? this.scenes[0].id : "";
+      }
 
       // Update current scene index
       if (this.currentSceneIndex === index) {
@@ -125,7 +160,12 @@ class SceneManagerEditor {
       this.scenes[index][property] = value;
 
       // If updating ID, update all hotspot target references (uses nested action.target)
+      // and keep config.initialSceneId pointing at the renamed scene
       if (property === "id") {
+        // Prevent duplicate IDs
+        if (this.getSceneById(value)) {
+          return false;
+        }
         this.scenes.forEach((scene) => {
           scene.hotspots.forEach((hotspot) => {
             if (hotspot.action?.target === oldId) {
@@ -133,6 +173,9 @@ class SceneManagerEditor {
             }
           });
         });
+        if (this.editor.config.initialSceneId === oldId) {
+          this.editor.config.initialSceneId = value;
+        }
       }
 
       return true;
@@ -215,10 +258,18 @@ class SceneManagerEditor {
       }
     }
 
+    this.resetScenes();
+    return true;
+  }
+
+  /**
+   * Reset all scenes without confirmation (used by newProject, which
+   * performs its own single confirmation before touching any state)
+   */
+  resetScenes() {
     this.scenes = [];
     this.currentSceneIndex = -1;
     this.editor.emit(EditorEvents.SCENE_CLEAR);
-    return true;
   }
 
   /**
@@ -226,6 +277,18 @@ class SceneManagerEditor {
    */
   loadScenes(scenesData) {
     this.scenes = scenesData || [];
+    // Enforce unique scene IDs (imported data may contain duplicates)
+    this.scenes.forEach((scene, index) => {
+      if (!scene.id) {
+        scene.id = sanitizeId(`scene-${Date.now()}_${index}`);
+      }
+      const isDuplicate = this.scenes.some(
+        (other, otherIndex) => otherIndex !== index && other.id === scene.id
+      );
+      if (isDuplicate) {
+        scene.id = this.ensureUniqueSceneId(scene.id);
+      }
+    });
     this.currentSceneIndex = this.scenes.length > 0 ? 0 : -1;
   }
 }

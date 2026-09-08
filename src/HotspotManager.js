@@ -55,11 +55,22 @@ export class HotspotManager {
 
   /**
    * Handle hotspot hover events to show/hide tooltip
+   * @param {CustomEvent} evt - DOM event; payload is on evt.detail
    */
-  handleHotspotHover(detail) {
-    if (detail.isHovering && detail.hotspotData.tooltip) {
-      const text = detail.hotspotData.tooltip.text;
-      const position = detail.hotspotData.position;
+  handleHotspotHover(evt) {
+    const detail = evt && evt.detail ? evt.detail : {};
+    const hotspotData = detail.hotspotData;
+
+    if (detail.isHovering && hotspotData && hotspotData.tooltip) {
+      if (!this.tooltipEl) {
+        this.createTooltip();
+      }
+      if (!this.tooltipEl) {
+        return;
+      }
+
+      const text = hotspotData.tooltip.text;
+      const position = hotspotData.position;
       
       // Update tooltip text
       const textEl = this.tooltipEl.querySelector('a-text');
@@ -75,7 +86,9 @@ export class HotspotManager {
         this.tooltipEl.setAttribute('swt-billboard', 'enabled: true');
       }
     } else {
-      this.tooltipEl.setAttribute('visible', 'false');
+      if (this.tooltipEl) {
+        this.tooltipEl.setAttribute('visible', 'false');
+      }
     }
   }
 
@@ -182,9 +195,8 @@ export class HotspotManager {
       visualEl.setAttribute('material', 'side', 'double');
     }
 
-    // Set scale
-    const scale = hotspot.appearance?.scale || this.defaultSettings.scale || '1 1 1';
-    visualEl.setAttribute('scale', scale);
+    // Set scale (normalizes numbers, single values, and "x y z" vectors)
+    visualEl.setAttribute('scale', this.normalizeScale(hotspot.appearance?.scale ?? this.defaultSettings.scale));
 
     // Make it always face the camera (billboard effect)
     visualEl.setAttribute('swt-billboard', 'enabled: true');
@@ -200,6 +212,30 @@ export class HotspotManager {
     hotspotEl.appendChild(visualEl);
     this.sceneEl.appendChild(hotspotEl);
     this.activeHotspots.push(hotspotEl);
+  }
+
+  /**
+   * Normalize a scale value to the "x y z" string form.
+   * Accepts numbers, single-component strings, and full "x y z" vectors.
+   * Must stay in sync with the normalization in swt-hotspot-listener.
+   * @param {number|string} value
+   * @returns {string}
+   */
+  normalizeScale(value) {
+    if (value === undefined || value === null || value === '') {
+      return '1 1 1';
+    }
+    if (typeof value === 'number' && isFinite(value)) {
+      return `${value} ${value} ${value}`;
+    }
+    if (typeof value === 'string') {
+      const parts = value.trim().split(/\s+/).map(Number);
+      if (parts.length >= 1 && parts.every((n) => isFinite(n) && n > 0)) {
+        const [x, y = x, z = x] = parts;
+        return `${x} ${y} ${z}`;
+      }
+    }
+    return '1 1 1';
   }
 
   /**

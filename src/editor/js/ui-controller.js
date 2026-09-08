@@ -7,9 +7,26 @@ import { EditorEvents } from "./event-emitter.js";
 class UIController {
   constructor(editor) {
     this.editor = editor;
-    this.sceneList = document.getElementById("sceneList");
-    this.hotspotList = document.getElementById("hotspotList");
+    // Resolve list containers from supplied options, falling back to
+    // document-global IDs for the default editor markup
+    this.sceneList =
+      editor.options.sceneListElement ||
+      editor.getScopedElement("sceneList");
+    this.hotspotList =
+      editor.options.hotspotListElement ||
+      editor.getScopedElement("hotspotList");
     this.draggedElement = null;
+  }
+
+  /**
+   * Look up an editor UI element by ID, scoped to the editor container when
+   * one was supplied. Returns null when the element is absent so callers
+   * must guard optional form fields.
+   * @param {string} id - Element ID
+   * @returns {Element|null}
+   */
+  getEl(id) {
+    return this.editor.getScopedElement(id);
   }
 
   /**
@@ -274,7 +291,7 @@ class UIController {
    * Set active state on icon grid button
    */
   setActiveIconButton(iconName) {
-    const grid = document.getElementById("hotspotIconGrid");
+    const grid = this.getEl("hotspotIconGrid");
     if (!grid) return;
     
     // Remove active from all buttons
@@ -294,7 +311,7 @@ class UIController {
    * Waits for ss-icon custom element to be defined to avoid race conditions
    */
   async populateIconGrid() {
-    const grid = document.getElementById("hotspotIconGrid");
+    const grid = this.getEl("hotspotIconGrid");
     if (!grid) return;
 
     // Wait for ss-icon custom element to be defined before populating
@@ -343,26 +360,33 @@ class UIController {
    * Uses unified format with nested appearance, action, and tooltip
    */
   updateHotspotProperties(hotspot) {
-    const hotspotAll = document.getElementById("hotspotAll");
-    const hotspotProperties = document.getElementById("hotspotProperties");
+    const hotspotAll = this.getEl("hotspotAll");
+    const hotspotProperties = this.getEl("hotspotProperties");
 
     if (!hotspot) {
       // No hotspot selected - show list, hide properties
       if (hotspotAll) hotspotAll.style.display = "block";
       if (hotspotProperties) hotspotProperties.style.display = "none";
 
-      // Clear form
-      document.getElementById("hotspotTitle").value = "";
-      document.getElementById("hotspotDescription").value = "";
-      document.getElementById("hotspotTarget").value = "";
-      document.getElementById("hotspotColor").value = "#00ff00";
-      const colorText = document.getElementById("hotspotColorText");
+      // Clear form (optional elements are guarded)
+      const title = this.getEl("hotspotTitle");
+      if (title) title.value = "";
+      const description = this.getEl("hotspotDescription");
+      if (description) description.value = "";
+      const target = this.getEl("hotspotTarget");
+      if (target) target.value = "";
+      const color = this.getEl("hotspotColor");
+      if (color) color.value = "#00ff00";
+      const colorText = this.getEl("hotspotColorText");
       if (colorText) colorText.value = "#00ff00";
       // Reset icon grid to "no icon" button
       this.setActiveIconButton("");
-      document.getElementById("hotspotPosX").value = "";
-      document.getElementById("hotspotPosY").value = "";
-      document.getElementById("hotspotPosZ").value = "";
+      const posX = this.getEl("hotspotPosX");
+      if (posX) posX.value = "";
+      const posY = this.getEl("hotspotPosY");
+      if (posY) posY.value = "";
+      const posZ = this.getEl("hotspotPosZ");
+      if (posZ) posZ.value = "";
       return;
     }
 
@@ -377,13 +401,17 @@ class UIController {
     const color = hotspot.appearance?.color || "#00ff00";
     const icon = hotspot.appearance?.icon || "";
 
-    document.getElementById("hotspotTitle").value = title;
-    document.getElementById("hotspotDescription").value = description;
-    document.getElementById("hotspotTarget").value = targetSceneId;
-    document.getElementById("hotspotColor").value = color;
+    const titleEl = this.getEl("hotspotTitle");
+    if (titleEl) titleEl.value = title;
+    const descriptionEl = this.getEl("hotspotDescription");
+    if (descriptionEl) descriptionEl.value = description;
+    const targetEl = this.getEl("hotspotTarget");
+    if (targetEl) targetEl.value = targetSceneId;
+    const colorEl = this.getEl("hotspotColor");
+    if (colorEl) colorEl.value = color;
 
     // Update color text input if it exists
-    const colorText = document.getElementById("hotspotColorText");
+    const colorText = this.getEl("hotspotColorText");
     if (colorText) {
       colorText.value = color;
     }
@@ -393,9 +421,12 @@ class UIController {
 
     // Update position inputs
     const pos = hotspot.position || { x: 0, y: 0, z: 0 };
-    document.getElementById("hotspotPosX").value = pos.x;
-    document.getElementById("hotspotPosY").value = pos.y;
-    document.getElementById("hotspotPosZ").value = pos.z;
+    const posX = this.getEl("hotspotPosX");
+    if (posX) posX.value = pos.x;
+    const posY = this.getEl("hotspotPosY");
+    if (posY) posY.value = pos.y;
+    const posZ = this.getEl("hotspotPosZ");
+    if (posZ) posZ.value = pos.z;
 
     // Update target dropdown
     this.updateTargetSceneOptions();
@@ -405,22 +436,28 @@ class UIController {
    * Update properties panel for scene
    */
   updateSceneProperties(scene) {
-    const startingPosDisplay = document.getElementById("startingPositionDisplay");
+    const startingPosDisplay = this.getEl("startingPositionDisplay");
     
     if (!scene) {
-      document.getElementById("sceneId").value = "";
-      document.getElementById("sceneName").value = "";
-      document.getElementById("sceneImageUrl").value = "";
+      const sceneId = this.getEl("sceneId");
+      if (sceneId) sceneId.value = "";
+      const sceneName = this.getEl("sceneName");
+      if (sceneName) sceneName.value = "";
+      const sceneImageUrl = this.getEl("sceneImageUrl");
+      if (sceneImageUrl) sceneImageUrl.value = "";
       if (startingPosDisplay) {
         startingPosDisplay.textContent = "Not set (camera keeps current position)";
       }
       return;
     }
 
-    document.getElementById("sceneId").value = scene.id || "";
-    document.getElementById("sceneName").value = scene.name || "";
+    const sceneId = this.getEl("sceneId");
+    if (sceneId) sceneId.value = scene.id || "";
+    const sceneName = this.getEl("sceneName");
+    if (sceneName) sceneName.value = scene.name || "";
     // Support both panorama (unified) and imageUrl (legacy)
-    document.getElementById("sceneImageUrl").value = scene.panorama || scene.imageUrl || "";
+    const sceneImageUrl = this.getEl("sceneImageUrl");
+    if (sceneImageUrl) sceneImageUrl.value = scene.panorama || scene.imageUrl || "";
     
     // Update starting position display
     if (startingPosDisplay) {
@@ -440,13 +477,15 @@ class UIController {
    * Update properties panel for tour
    */
   updateTourProperties(config) {
-    document.getElementById("tourTitle").value = config.title || "";
-    document.getElementById("tourDescription").value = config.description || "";
-    document.getElementById("tourInitialScene").value =
-      config.initialSceneId || "";
+    const tourTitle = this.getEl("tourTitle");
+    if (tourTitle) tourTitle.value = config.title || "";
+    const tourDescription = this.getEl("tourDescription");
+    if (tourDescription) tourDescription.value = config.description || "";
+    const tourInitialScene = this.getEl("tourInitialScene");
+    if (tourInitialScene) tourInitialScene.value = config.initialSceneId || "";
 
     // Also update project name in header if it exists
-    const projectName = document.getElementById("project-name");
+    const projectName = this.getEl("project-name");
     if (projectName) {
       projectName.value = config.title || "";
     }
@@ -456,7 +495,7 @@ class UIController {
    * Update target scene options in hotspot properties
    */
   updateTargetSceneOptions() {
-    const select = document.getElementById("hotspotTarget");
+    const select = this.getEl("hotspotTarget");
     if (!select) return;
 
     const scenes = this.editor.sceneManager.getAllScenes();
@@ -478,7 +517,7 @@ class UIController {
    * Update initial scene options in tour properties
    */
   updateInitialSceneOptions() {
-    const select = document.getElementById("tourInitialScene");
+    const select = this.getEl("tourInitialScene");
     if (!select) return;
 
     const scenes = this.editor.sceneManager.getAllScenes();
@@ -516,13 +555,15 @@ class UIController {
    * Switch properties tab
    */
   switchTab(tabName) {
+    const root = this.editor.options.containerElement || document;
+
     // Update tab buttons
-    document.querySelectorAll(".tab-btn").forEach((btn) => {
+    root.querySelectorAll(".tab-btn").forEach((btn) => {
       btn.classList.toggle("active", btn.dataset.tab === tabName);
     });
 
     // Update tab content
-    document.querySelectorAll(".tab-content").forEach((content) => {
+    root.querySelectorAll(".tab-content").forEach((content) => {
       content.classList.toggle("active", content.id === tabName + "Tab");
     });
   }

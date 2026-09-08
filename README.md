@@ -32,8 +32,8 @@ A powerful, data-driven 360° virtual tour system built on A-Frame WebVR. Create
 ### Core Capabilities
 
 - **Visual Editor** - No-code tour builder with click-to-place hotspot interface
-- **Viewer Library** - Lightweight (12KB minified) JavaScript library for embedding tours
-- **Standalone Viewer** - Self-contained HTML viewer with drag-and-drop JSON support
+- **Viewer Library** - JavaScript library for embedding tours
+- **Standalone Viewer** - HTML viewer with drag-and-drop JSON support
 - **Mobile & VR Ready** - Full touch, mouse, and VR headset support
 - **Customizable Hotspots** - Custom colors, scales, and tooltip text
 - **Multiple Export Formats** - JSON configuration or standalone HTML files
@@ -50,12 +50,16 @@ A powerful, data-driven 360° virtual tour system built on A-Frame WebVR. Create
 
 ### Using the Visual Editor (No Coding Required)
 
-1. **Start Local Server**:
+1. **Build and Start Local Server**:
 
    ```bash
    npm install
-   npm run dev
+   npm run build   # generate the dist/ bundles
+   npm run serve   # serve on http://localhost:8080
    ```
+
+   > `npm run dev` only watches/rebuilds the bundles - it does not start a server.
+   > Use `npm run serve` (or any static file server) alongside it during development.
 
 2. **Open Editor**: Navigate to `http://localhost:8080/examples/editor.html`
 
@@ -69,7 +73,7 @@ A powerful, data-driven 360° virtual tour system built on A-Frame WebVR. Create
 4. **Export Your Tour**:
 
    - **JSON Export** → Portable config file for library integration
-   - **Viewer Export** → Self-contained HTML file (no dependencies needed)
+   - **Viewer Export** → Standalone HTML file (loads the runtime from a pinned CDN version)
 
 5. **Test Standalone Viewer**: Open `http://localhost:8080/examples/viewer.html` and drag-and-drop your exported JSON
 
@@ -217,17 +221,19 @@ Build your own tour editor using the `swt-editor.js` bundle. Two initialization 
         propertiesElement: document.getElementById("properties"),
       });
 
-      // Access editor programmatically
-      editor.addEventListener("scene-added", (scene) => {
-        console.log("New scene:", scene.name);
+      // Subscribe to editor events via the event emitter
+      editor.on(EditorEvents.SCENE_ADD, (data) => {
+        console.log("New scene:", data.scene.name);
       });
 
       // Export tour configuration
-      const config = editor.exportJSON();
+      const config = editor.exportManager.generateJSON();
     </script>
   </body>
 </html>
 ```
+
+`EditorEvents` is exposed globally by `swt-editor.js` (e.g. `EditorEvents.SCENE_ADD` = `"scene:add"`). See the `EditorEvents` map in the source for all available event names.
 
 **Available Classes** (all attached to `window` after loading `swt-editor.js`):
 
@@ -291,6 +297,7 @@ Both the editor and viewer use the same data format. Scenes are stored as an **a
       id: "scene-id",              // Required: Scene identifier
       name: "Scene Name",          // Required: Display name
       panorama: "url-or-dataurl",  // Required: Image URL or base64
+      mediaType: "video",          // Optional: Force video handling when the URL has no recognizable extension
       thumbnail: "url",            // Optional: Thumbnail for editor
       startingPosition: {          // Optional: Initial camera orientation
         pitch: 0.1,                // Vertical angle (radians)
@@ -577,11 +584,15 @@ setTimeout(() => {
    - Compatible with `SWT.Tour` viewer library
    - Use in custom integrations or standalone viewer
 
-2. **Viewer Export** - Self-contained HTML file
-   - Embeds minified `swt.min.js` library
-   - Includes full tour JSON configuration
-   - No external dependencies - works offline
+2. **Viewer Export** - Standalone HTML file
+   - Loads the pinned `swt.min.js` runtime from a CDN (requires internet access)
+   - Includes full tour JSON configuration with icons baked in as data URLs
+   - Panorama images are embedded as URLs/data URLs from the project
    - Drag-and-drop ready for distribution
+
+   > Note: exported viewers need network access to load the library runtime
+   > from unpkg. panoramas supplied as regular URLs are also fetched from
+   > their source at view time.
 
 ### Developer Tools
 

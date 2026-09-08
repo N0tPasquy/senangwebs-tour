@@ -31,11 +31,12 @@ function initDeclarativeEditor() {
     parseInt(editorElement.getAttribute("data-swt-auto-save-interval")) ||
     30000;
 
-  // Create and initialize editor
+  // Create and initialize editor, scoping all UI lookups to the container
   const editor = new TourEditor({
     projectName,
     autoSave,
     autoSaveInterval,
+    containerElement: editorElement,
   });
 
   // Store element references for controllers
@@ -101,7 +102,9 @@ window.addEventListener("DOMContentLoaded", () => {
   const previewBtn = document.getElementById("previewBtn");
   if (previewBtn) {
     previewBtn.addEventListener("click", () => {
-      const preview = document.getElementById("preview");
+      const preview =
+        (window.editor && window.editor.options?.previewElement) ||
+        document.getElementById("preview");
       const canvas = document.getElementById("canvasArea");
       if (preview && canvas) {
         canvas.classList.toggle("preview-active");

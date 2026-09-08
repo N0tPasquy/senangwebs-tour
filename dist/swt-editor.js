@@ -77,10 +77,13 @@
     }
 
     /**
-     * Show toast notification
+     * Show toast notification (no-op when no toast element exists)
      */
     function showToast(message, type = 'info', duration = 3000) {
         const toast = document.getElementById('toast');
+        if (!toast) {
+            return;
+        }
         toast.textContent = message;
         toast.className = `toast ${type}`;
         toast.classList.add('show');
@@ -88,6 +91,31 @@
         setTimeout(() => {
             toast.classList.remove('show');
         }, duration);
+    }
+
+    /**
+     * Escape a string for safe interpolation into an HTML text/attribute context
+     */
+    function escapeHtml(str) {
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    /**
+     * Serialize JSON for safe embedding inside a <script> block.
+     * Neutralizes </script> breakouts and HTML delimiters by escaping
+     * <, >, &, U+2028 and U+2029 in the serialized output.
+     */
+    function safeJsonStringify(data, indent) {
+        return JSON.stringify(data, null, indent)
+            .replace(/</g, '\\u003c')
+            .replace(/>/g, '\\u003e')
+            .replace(/\u2028/g, '\\u2028')
+            .replace(/\u2029/g, '\\u2029');
     }
 
     /**
@@ -208,6 +236,7 @@
         debounce: debounce,
         deepClone: deepClone,
         downloadTextAsFile: downloadTextAsFile,
+        escapeHtml: escapeHtml,
         formatFileSize: formatFileSize,
         generateId: generateId,
         generateThumbnail: generateThumbnail,
@@ -216,6 +245,7 @@
         loadImageAsDataUrl: loadImageAsDataUrl,
         parsePosition: parsePosition,
         positionToString: positionToString,
+        safeJsonStringify: safeJsonStringify,
         sanitizeId: sanitizeId$1,
         showModal: showModal,
         showToast: showToast
@@ -706,7 +736,9 @@
             const imageDataUrl = await loadImageAsDataUrl(fileOrConfig);
 
             scene = {
-              id: sanitizeId$1(fileOrConfig.name.replace(/\.[^/.]+$/, "")),
+              id: this.ensureUniqueSceneId(
+                sanitizeId$1(fileOrConfig.name.replace(/\.[^/.]+$/, ""))
+              ),
               name: fileOrConfig.name.replace(/\.[^/.]+$/, ""),
               panorama: imageDataUrl,
               thumbnail: thumbnail,
@@ -715,7 +747,9 @@
           } else if (typeof fileOrConfig === "object" && fileOrConfig !== null) {
             // Handle config object - support both panorama and imageUrl for backward compatibility
             scene = {
-              id: fileOrConfig.id || sanitizeId$1(`scene-${Date.now()}`),
+              id: this.ensureUniqueSceneId(
+                fileOrConfig.id || sanitizeId$1(`scene-${Date.now()}`)
+              ),
               name: fileOrConfig.name || "Untitled Scene",
               panorama: fileOrConfig.panorama || fileOrConfig.imageUrl || "",
               thumbnail: fileOrConfig.thumbnail || fileOrConfig.panorama || fileOrConfig.imageUrl || "",
@@ -738,6 +772,23 @@
       }
 
       /**
+       * Ensure a scene ID is unique across all scenes.
+       * Appends an incremental suffix when the ID is already taken.
+       * @param {string} id - Desired scene ID
+       * @returns {string} A unique scene ID
+       */
+      ensureUniqueSceneId(id) {
+        if (!this.getSceneById(id)) {
+          return id;
+        }
+        let counter = 2;
+        while (this.getSceneById(`${id}_${counter}`)) {
+          counter++;
+        }
+        return `${id}_${counter}`;
+      }
+
+      /**
        * Remove scene by index
        */
       removeScene(index) {
@@ -750,6 +801,20 @@
           }
 
           this.scenes.splice(index, 1);
+
+          // Clean up dangling references to the deleted scene
+          const deletedId = scene.id;
+          this.scenes.forEach((remainingScene) => {
+            remainingScene.hotspots.forEach((hotspot) => {
+              if (hotspot.action?.target === deletedId) {
+                hotspot.action.target = "";
+              }
+            });
+          });
+          if (this.editor.config.initialSceneId === deletedId) {
+            this.editor.config.initialSceneId =
+              this.scenes.length > 0 ? this.scenes[0].id : "";
+          }
 
           // Update current scene index
           if (this.currentSceneIndex === index) {
@@ -797,7 +862,12 @@
           this.scenes[index][property] = value;
 
           // If updating ID, update all hotspot target references (uses nested action.target)
+          // and keep config.initialSceneId pointing at the renamed scene
           if (property === "id") {
+            // Prevent duplicate IDs
+            if (this.getSceneById(value)) {
+              return false;
+            }
             this.scenes.forEach((scene) => {
               scene.hotspots.forEach((hotspot) => {
                 if (hotspot.action?.target === oldId) {
@@ -805,6 +875,9 @@
                 }
               });
             });
+            if (this.editor.config.initialSceneId === oldId) {
+              this.editor.config.initialSceneId = value;
+            }
           }
 
           return true;
@@ -887,10 +960,18 @@
           }
         }
 
+        this.resetScenes();
+        return true;
+      }
+
+      /**
+       * Reset all scenes without confirmation (used by newProject, which
+       * performs its own single confirmation before touching any state)
+       */
+      resetScenes() {
         this.scenes = [];
         this.currentSceneIndex = -1;
         this.editor.emit(EditorEvents.SCENE_CLEAR);
-        return true;
       }
 
       /**
@@ -898,6 +979,18 @@
        */
       loadScenes(scenesData) {
         this.scenes = scenesData || [];
+        // Enforce unique scene IDs (imported data may contain duplicates)
+        this.scenes.forEach((scene, index) => {
+          if (!scene.id) {
+            scene.id = sanitizeId$1(`scene-${Date.now()}_${index}`);
+          }
+          const isDuplicate = this.scenes.some(
+            (other, otherIndex) => otherIndex !== index && other.id === scene.id
+          );
+          if (isDuplicate) {
+            scene.id = this.ensureUniqueSceneId(scene.id);
+          }
+        });
         this.currentSceneIndex = this.scenes.length > 0 ? 0 : -1;
       }
     };
@@ -1134,15 +1227,23 @@
      * @returns {Object} Complete tour config
      */
     function buildTourConfig(config, scenes) {
-      // Determine initial scene
+      const sceneList = scenes || [];
+
+      // Validate the initial-scene reference; fall back to the first scene
       let initialScene = config.initialSceneId;
-      if (!initialScene && scenes && scenes.length > 0) {
-        initialScene = scenes[0].id;
+      const initialSceneExists = initialScene && sceneList.some((s) => s.id === initialScene);
+      if (!initialSceneExists) {
+        if (initialScene) {
+          console.warn(
+            `Initial scene "${initialScene}" not found in scenes; falling back to first scene`
+          );
+        }
+        initialScene = sceneList.length > 0 ? sceneList[0].id : '';
       }
 
       return {
         initialScene: initialScene,
-        scenes: scenes || [],
+        scenes: sceneList,
       };
     }
 
@@ -1174,7 +1275,9 @@
        * Initialize A-Frame preview
        */
       async init() {
-        this.previewContainer = document.getElementById("preview");
+        // Use the supplied preview element when provided; fall back to #preview
+        this.previewContainer =
+          this.editor.options.previewElement || document.getElementById("preview");
         if (!this.previewContainer) {
           console.error("Preview element not found");
           return false;
@@ -4272,9 +4375,26 @@
     let UIController$1 = class UIController {
       constructor(editor) {
         this.editor = editor;
-        this.sceneList = document.getElementById("sceneList");
-        this.hotspotList = document.getElementById("hotspotList");
+        // Resolve list containers from supplied options, falling back to
+        // document-global IDs for the default editor markup
+        this.sceneList =
+          editor.options.sceneListElement ||
+          editor.getScopedElement("sceneList");
+        this.hotspotList =
+          editor.options.hotspotListElement ||
+          editor.getScopedElement("hotspotList");
         this.draggedElement = null;
+      }
+
+      /**
+       * Look up an editor UI element by ID, scoped to the editor container when
+       * one was supplied. Returns null when the element is absent so callers
+       * must guard optional form fields.
+       * @param {string} id - Element ID
+       * @returns {Element|null}
+       */
+      getEl(id) {
+        return this.editor.getScopedElement(id);
       }
 
       /**
@@ -4539,7 +4659,7 @@
        * Set active state on icon grid button
        */
       setActiveIconButton(iconName) {
-        const grid = document.getElementById("hotspotIconGrid");
+        const grid = this.getEl("hotspotIconGrid");
         if (!grid) return;
         
         // Remove active from all buttons
@@ -4559,7 +4679,7 @@
        * Waits for ss-icon custom element to be defined to avoid race conditions
        */
       async populateIconGrid() {
-        const grid = document.getElementById("hotspotIconGrid");
+        const grid = this.getEl("hotspotIconGrid");
         if (!grid) return;
 
         // Wait for ss-icon custom element to be defined before populating
@@ -4608,26 +4728,33 @@
        * Uses unified format with nested appearance, action, and tooltip
        */
       updateHotspotProperties(hotspot) {
-        const hotspotAll = document.getElementById("hotspotAll");
-        const hotspotProperties = document.getElementById("hotspotProperties");
+        const hotspotAll = this.getEl("hotspotAll");
+        const hotspotProperties = this.getEl("hotspotProperties");
 
         if (!hotspot) {
           // No hotspot selected - show list, hide properties
           if (hotspotAll) hotspotAll.style.display = "block";
           if (hotspotProperties) hotspotProperties.style.display = "none";
 
-          // Clear form
-          document.getElementById("hotspotTitle").value = "";
-          document.getElementById("hotspotDescription").value = "";
-          document.getElementById("hotspotTarget").value = "";
-          document.getElementById("hotspotColor").value = "#00ff00";
-          const colorText = document.getElementById("hotspotColorText");
+          // Clear form (optional elements are guarded)
+          const title = this.getEl("hotspotTitle");
+          if (title) title.value = "";
+          const description = this.getEl("hotspotDescription");
+          if (description) description.value = "";
+          const target = this.getEl("hotspotTarget");
+          if (target) target.value = "";
+          const color = this.getEl("hotspotColor");
+          if (color) color.value = "#00ff00";
+          const colorText = this.getEl("hotspotColorText");
           if (colorText) colorText.value = "#00ff00";
           // Reset icon grid to "no icon" button
           this.setActiveIconButton("");
-          document.getElementById("hotspotPosX").value = "";
-          document.getElementById("hotspotPosY").value = "";
-          document.getElementById("hotspotPosZ").value = "";
+          const posX = this.getEl("hotspotPosX");
+          if (posX) posX.value = "";
+          const posY = this.getEl("hotspotPosY");
+          if (posY) posY.value = "";
+          const posZ = this.getEl("hotspotPosZ");
+          if (posZ) posZ.value = "";
           return;
         }
 
@@ -4642,13 +4769,17 @@
         const color = hotspot.appearance?.color || "#00ff00";
         const icon = hotspot.appearance?.icon || "";
 
-        document.getElementById("hotspotTitle").value = title;
-        document.getElementById("hotspotDescription").value = description;
-        document.getElementById("hotspotTarget").value = targetSceneId;
-        document.getElementById("hotspotColor").value = color;
+        const titleEl = this.getEl("hotspotTitle");
+        if (titleEl) titleEl.value = title;
+        const descriptionEl = this.getEl("hotspotDescription");
+        if (descriptionEl) descriptionEl.value = description;
+        const targetEl = this.getEl("hotspotTarget");
+        if (targetEl) targetEl.value = targetSceneId;
+        const colorEl = this.getEl("hotspotColor");
+        if (colorEl) colorEl.value = color;
 
         // Update color text input if it exists
-        const colorText = document.getElementById("hotspotColorText");
+        const colorText = this.getEl("hotspotColorText");
         if (colorText) {
           colorText.value = color;
         }
@@ -4658,9 +4789,12 @@
 
         // Update position inputs
         const pos = hotspot.position || { x: 0, y: 0, z: 0 };
-        document.getElementById("hotspotPosX").value = pos.x;
-        document.getElementById("hotspotPosY").value = pos.y;
-        document.getElementById("hotspotPosZ").value = pos.z;
+        const posX = this.getEl("hotspotPosX");
+        if (posX) posX.value = pos.x;
+        const posY = this.getEl("hotspotPosY");
+        if (posY) posY.value = pos.y;
+        const posZ = this.getEl("hotspotPosZ");
+        if (posZ) posZ.value = pos.z;
 
         // Update target dropdown
         this.updateTargetSceneOptions();
@@ -4670,22 +4804,28 @@
        * Update properties panel for scene
        */
       updateSceneProperties(scene) {
-        const startingPosDisplay = document.getElementById("startingPositionDisplay");
+        const startingPosDisplay = this.getEl("startingPositionDisplay");
         
         if (!scene) {
-          document.getElementById("sceneId").value = "";
-          document.getElementById("sceneName").value = "";
-          document.getElementById("sceneImageUrl").value = "";
+          const sceneId = this.getEl("sceneId");
+          if (sceneId) sceneId.value = "";
+          const sceneName = this.getEl("sceneName");
+          if (sceneName) sceneName.value = "";
+          const sceneImageUrl = this.getEl("sceneImageUrl");
+          if (sceneImageUrl) sceneImageUrl.value = "";
           if (startingPosDisplay) {
             startingPosDisplay.textContent = "Not set (camera keeps current position)";
           }
           return;
         }
 
-        document.getElementById("sceneId").value = scene.id || "";
-        document.getElementById("sceneName").value = scene.name || "";
+        const sceneId = this.getEl("sceneId");
+        if (sceneId) sceneId.value = scene.id || "";
+        const sceneName = this.getEl("sceneName");
+        if (sceneName) sceneName.value = scene.name || "";
         // Support both panorama (unified) and imageUrl (legacy)
-        document.getElementById("sceneImageUrl").value = scene.panorama || scene.imageUrl || "";
+        const sceneImageUrl = this.getEl("sceneImageUrl");
+        if (sceneImageUrl) sceneImageUrl.value = scene.panorama || scene.imageUrl || "";
         
         // Update starting position display
         if (startingPosDisplay) {
@@ -4705,13 +4845,15 @@
        * Update properties panel for tour
        */
       updateTourProperties(config) {
-        document.getElementById("tourTitle").value = config.title || "";
-        document.getElementById("tourDescription").value = config.description || "";
-        document.getElementById("tourInitialScene").value =
-          config.initialSceneId || "";
+        const tourTitle = this.getEl("tourTitle");
+        if (tourTitle) tourTitle.value = config.title || "";
+        const tourDescription = this.getEl("tourDescription");
+        if (tourDescription) tourDescription.value = config.description || "";
+        const tourInitialScene = this.getEl("tourInitialScene");
+        if (tourInitialScene) tourInitialScene.value = config.initialSceneId || "";
 
         // Also update project name in header if it exists
-        const projectName = document.getElementById("project-name");
+        const projectName = this.getEl("project-name");
         if (projectName) {
           projectName.value = config.title || "";
         }
@@ -4721,7 +4863,7 @@
        * Update target scene options in hotspot properties
        */
       updateTargetSceneOptions() {
-        const select = document.getElementById("hotspotTarget");
+        const select = this.getEl("hotspotTarget");
         if (!select) return;
 
         const scenes = this.editor.sceneManager.getAllScenes();
@@ -4743,7 +4885,7 @@
        * Update initial scene options in tour properties
        */
       updateInitialSceneOptions() {
-        const select = document.getElementById("tourInitialScene");
+        const select = this.getEl("tourInitialScene");
         if (!select) return;
 
         const scenes = this.editor.sceneManager.getAllScenes();
@@ -4781,13 +4923,15 @@
        * Switch properties tab
        */
       switchTab(tabName) {
+        const root = this.editor.options.containerElement || document;
+
         // Update tab buttons
-        document.querySelectorAll(".tab-btn").forEach((btn) => {
+        root.querySelectorAll(".tab-btn").forEach((btn) => {
           btn.classList.toggle("active", btn.dataset.tab === tabName);
         });
 
         // Update tab content
-        document.querySelectorAll(".tab-content").forEach((content) => {
+        root.querySelectorAll(".tab-content").forEach((content) => {
           content.classList.toggle("active", content.id === tabName + "Tab");
         });
       }
@@ -4800,6 +4944,27 @@
       constructor() {
         this.iconCache = new Map();
         this.renderContainer = null;
+      }
+
+      /**
+       * Validate an icon name (icon names are slugs such as 'arrow-right').
+       * Rejects anything that could break out of an attribute or inject markup.
+       * @param {string} iconName
+       * @returns {boolean}
+       */
+      isValidIconName(iconName) {
+        return typeof iconName === 'string' && /^[a-z0-9][a-z0-9_-]*$/i.test(iconName);
+      }
+
+      /**
+       * Validate a color value (hex, rgb(), hsl(), or simple named colors).
+       * Rejects values containing quotes, semicolons, braces, or other markup.
+       * @param {string} color
+       * @returns {boolean}
+       */
+      isValidColor(color) {
+        if (typeof color !== 'string' || color.length > 64) return false;
+        return /^#[0-9a-f]{3,8}$|^rgba?\([\d\s.,%]+\)$|^hsla?\([\d\s.,%]+\)$|^[a-z]+$/i.test(color.trim());
       }
 
       /**
@@ -4836,30 +5001,42 @@
           return this.iconCache.get(cacheKey);
         }
 
+        // Reject unsafe icon names and colors before any rendering happens
+        if (!this.isValidIconName(iconName)) {
+          console.warn(`Invalid icon name "${iconName}", skipping icon render`);
+          return null;
+        }
+        if (!this.isValidColor(color)) {
+          console.warn(`Invalid color "${color}", skipping icon render`);
+          return null;
+        }
+
         this.init();
 
-        return new Promise((resolve, reject) => {
-          // Create the ss-icon element
-          this.renderContainer.innerHTML = `
-        <ss-icon 
-          icon="${iconName}" 
-          thickness="2.5" 
-          style="color: ${color}; width: ${size}px; height: ${size}px; display: block;"
-        ></ss-icon>
-      `;
+        // Create the ss-icon element with DOM APIs (no HTML string interpolation)
+        this.renderContainer.innerHTML = '';
+        const ssIcon = document.createElement('ss-icon');
+        ssIcon.setAttribute('icon', iconName);
+        ssIcon.setAttribute('thickness', '2.5');
+        ssIcon.style.color = color;
+        ssIcon.style.width = `${size}px`;
+        ssIcon.style.height = `${size}px`;
+        ssIcon.style.display = 'block';
+        this.renderContainer.appendChild(ssIcon);
 
+        return new Promise((resolve) => {
           // Wait for the custom element to render
           setTimeout(() => {
             try {
-              const ssIcon = this.renderContainer.querySelector('ss-icon');
-              if (!ssIcon || !ssIcon.shadowRoot) {
+              const renderedIcon = this.renderContainer.querySelector('ss-icon');
+              if (!renderedIcon || !renderedIcon.shadowRoot) {
                 console.warn(`Icon ${iconName} not rendered properly`);
                 resolve(null);
                 return;
               }
 
               // Get the SVG from shadow root
-              const svg = ssIcon.shadowRoot.querySelector('svg');
+              const svg = renderedIcon.shadowRoot.querySelector('svg');
               if (!svg) {
                 console.warn(`SVG not found for icon ${iconName}`);
                 resolve(null);
@@ -4917,6 +5094,10 @@
       }
     }
 
+    var version = "1.0.20";
+    var packageInfo = {
+    	version: version};
+
     // Export Manager - Handles JSON generation for SWT library
 
     let ExportManager$1 = class ExportManager {
@@ -4956,12 +5137,20 @@
           const scenes = tourData.scenes || [];
           this.editor.sceneManager.loadScenes(scenes);
 
-          // Set initial scene in config
-          if (tourData.initialScene) {
-            this.editor.config.initialSceneId = tourData.initialScene;
+          // Set initial scene in config (accepts both initialSceneId and initialScene)
+          const requestedInitialScene =
+            (tourData.config && tourData.config.initialSceneId) ||
+            tourData.initialSceneId ||
+            tourData.initialScene;
+          if (requestedInitialScene && this.editor.sceneManager.getSceneById(requestedInitialScene)) {
+            this.editor.config.initialSceneId = requestedInitialScene;
           } else if (scenes.length > 0) {
             this.editor.config.initialSceneId = scenes[0].id;
           }
+
+          // Reset preview and selection state so the new project renders cleanly
+          this.editor.hotspotEditor.currentHotspotIndex = -1;
+          this.editor.lastRenderedSceneIndex = -1;
 
           // Mark as having unsaved changes
           this.editor.hasUnsavedChanges = true;
@@ -4987,17 +5176,18 @@
        * This ensures the exported HTML doesn't need the SenangStart icons library
        */
       async generateJSONWithBakedIcons() {
-        const jsonData = this.generateJSON();
+        // Deep-clone so baked icons never modify the live editor project state
+        const jsonData = deepClone(this.generateJSON());
         
-        // Process all scenes in parallel
-        const scenePromises = jsonData.scenes.map(async (scene) => {
-          // Process all hotspots in this scene in parallel
-          const hotspotPromises = scene.hotspots.map(async (hotspot) => {
+        // Process icons SEQUENTIALLY: IconRenderer uses a single shared render
+        // container, so parallel generation would corrupt captured icons.
+        for (const scene of jsonData.scenes) {
+          for (const hotspot of scene.hotspots) {
             const icon = hotspot.appearance?.icon;
             
             // Skip if no icon or if it's already a data URL or URL
-            if (!icon) return;
-            if (icon.startsWith('data:') || icon.startsWith('http') || icon.startsWith('/')) return;
+            if (!icon) continue;
+            if (icon.startsWith('data:') || icon.startsWith('http') || icon.startsWith('/')) continue;
             
             // Generate SVG data URL from icon name
             try {
@@ -5009,12 +5199,9 @@
             } catch (err) {
               console.warn(`Failed to bake icon "${icon}" for export:`, err);
             }
-          });
-          
-          await Promise.all(hotspotPromises);
-        });
+          }
+        }
         
-        await Promise.all(scenePromises);
         return jsonData;
       }
 
@@ -5066,7 +5253,11 @@
        */
       async generateViewerHTML() {
         const jsonData = await this.generateJSONWithBakedIcons();
-        const title = this.editor.config.title || "Virtual Tour";
+        const rawTitle = this.editor.config.title || "Virtual Tour";
+        // Escape for the HTML <title> context
+        const title = escapeHtml(rawTitle);
+        // Pin the runtime version so exported viewers are reproducible
+        const runtimeVersion = packageInfo.version;
 
         return `<!DOCTYPE html>
 <html lang="en">
@@ -5074,7 +5265,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>${title}</title>
-    <script src="https://unpkg.com/senangwebs-tour@latest/dist/swt.min.js"></script>
+    <script src="https://unpkg.com/senangwebs-tour@${runtimeVersion}/dist/swt.min.js"></script>
   </head>
   <body>
     <a-scene id="tour-container">
@@ -5085,7 +5276,8 @@
 
     <script>
       // Tour configuration
-      const tourConfig = ${JSON.stringify(jsonData, null, 8)
+      // Serialized with <, >, & escaped so the data cannot break out of this script
+      const tourConfig = ${safeJsonStringify(jsonData, 8)
         .split("\n")
         .map((line, i) => (i === 0 ? line : "      " + line))
         .join("\n")};
@@ -5159,6 +5351,8 @@
                 sceneListElement: options.sceneListElement || null,
                 previewElement: options.previewElement || null,
                 propertiesElement: options.propertiesElement || null,
+                hotspotListElement: options.hotspotListElement || null,
+                containerElement: options.containerElement || null,
                 autoSave: options.autoSave !== undefined ? options.autoSave : false,
                 autoSaveInterval: options.autoSaveInterval || 30000,
                 ...options
@@ -5177,6 +5371,23 @@
             
             // Initialize event emitter
             this.events = new EventEmitter();
+        }
+
+        /**
+         * Query an element by ID, scoped to the editor container when one was
+         * supplied, falling back to the document.
+         * @param {string} id - Element ID
+         * @returns {Element|null}
+         */
+        getScopedElement(id) {
+            const root = this.options.containerElement;
+            if (root) {
+                const scoped = root.querySelector(`#${id}`);
+                if (scoped) {
+                    return scoped;
+                }
+            }
+            return document.getElementById(id);
         }
 
         /**
@@ -5726,7 +5937,10 @@
                     pos.y *= scale;
                     pos.z *= scale;
                     
-                    document.getElementById(`hotspotPos${axis.toUpperCase()}`).value = pos[axis].toFixed(2);
+                    const posInput = document.getElementById(`hotspotPos${axis.toUpperCase()}`);
+                    if (posInput) {
+                        posInput.value = pos[axis].toFixed(2);
+                    }
                     showToast('Position clamped to 5-unit radius', 'info');
                 }
                 
@@ -5901,6 +6115,7 @@
             if (projectData) {
                 this.config = projectData.config || this.config;
                 this.sceneManager.loadScenes(projectData.scenes || []);
+                this.lastRenderedSceneIndex = -1;
                 this.hasUnsavedChanges = false;
                 this.render();
                 showToast('Project loaded', 'success');
@@ -5912,21 +6127,25 @@
 
         /**
          * New project
+         * Confirms once before modifying any state; cancellation leaves
+         * configuration, scenes, and unsaved-state untouched.
          */
         newProject() {
-            if (this.hasUnsavedChanges) {
-                if (!confirm('You have unsaved changes. Create new project?')) {
-                    return false;
-                }
+            const hasScenes = this.sceneManager.getScenes().length > 0;
+            if ((this.hasUnsavedChanges || hasScenes) &&
+                !confirm('You have unsaved changes. Create new project?')) {
+                return false;
             }
 
+            // Confirmed - now commit the reset
             this.config = {
                 title: 'My Virtual Tour',
                 description: '',
                 initialSceneId: ''
             };
             
-            this.sceneManager.clearScenes();
+            this.sceneManager.resetScenes();
+            this.lastRenderedSceneIndex = -1;
             this.hasUnsavedChanges = false;
             this.render();
             
@@ -5947,15 +6166,21 @@
 
         /**
          * Handle import file
+         * Validates and normalizes imported data (both exported tour JSON with
+         * `initialScene` and editor project files with `config.initialSceneId`)
+         * before replacing project state.
          */
         async handleImportFile(file) {
             try {
                 this.uiController.setLoading(true);
                 
-                const projectData = await this.storageManager.importFromFile(file);
+                const importedData = await this.storageManager.importFromFile(file);
+                const projectData = this.normalizeImportedData(importedData);
                 
-                this.config = projectData.config || projectData;
+                this.config = projectData.config;
                 this.sceneManager.loadScenes(projectData.scenes || []);
+                this.lastRenderedSceneIndex = -1;
+                this.hotspotEditor.currentHotspotIndex = -1;
                 this.hasUnsavedChanges = true;
                 
                 this.render();
@@ -5966,7 +6191,55 @@
             } catch (error) {
                 this.uiController.setLoading(false);
                 console.error('Import failed:', error);
+                showToast('Invalid or corrupt project file', 'error');
             }
+        }
+
+        /**
+         * Validate and normalize imported tour data into editor project format
+         * @param {Object} data - Raw imported data
+         * @returns {Object} Normalized project data: { config, scenes }
+         */
+        normalizeImportedData(data) {
+            if (!data || typeof data !== 'object') {
+                throw new Error('Invalid project data');
+            }
+
+            // Accept both editor project files ({ config: { initialSceneId }, scenes })
+            // and exported tour JSON ({ initialScene, scenes })
+            const scenes = Array.isArray(data.scenes) ? data.scenes : [];
+            if (scenes.length === 0) {
+                throw new Error('No scenes found in project data');
+            }
+
+            // Validate each scene has id and a panorama
+            const validScenes = scenes.filter(
+                (scene) => scene && typeof scene === 'object' && scene.id &&
+                    (scene.panorama || scene.imageUrl)
+            );
+            if (validScenes.length === 0) {
+                throw new Error('No valid scenes found in project data');
+            }
+
+            let initialSceneId = '';
+            if (data.config && typeof data.config === 'object') {
+                initialSceneId = data.config.initialSceneId || '';
+            } else if (data.initialScene) {
+                initialSceneId = data.initialScene;
+            }
+            // Keep the imported starting scene only if it still exists after import
+            if (!validScenes.some((scene) => scene.id === initialSceneId)) {
+                initialSceneId = validScenes[0].id;
+            }
+
+            return {
+                config: {
+                    title: (data.config && data.config.title) || data.title || 'My Virtual Tour',
+                    description: (data.config && data.config.description) || data.description || '',
+                    initialSceneId
+                },
+                scenes: validScenes
+            };
         }
 
         /**
@@ -6037,11 +6310,12 @@
         parseInt(editorElement.getAttribute("data-swt-auto-save-interval")) ||
         30000;
 
-      // Create and initialize editor
+      // Create and initialize editor, scoping all UI lookups to the container
       const editor = new TourEditor({
         projectName,
         autoSave,
         autoSaveInterval,
+        containerElement: editorElement,
       });
 
       // Store element references for controllers
@@ -6107,7 +6381,9 @@
       const previewBtn = document.getElementById("previewBtn");
       if (previewBtn) {
         previewBtn.addEventListener("click", () => {
-          const preview = document.getElementById("preview");
+          const preview =
+            (window.editor && window.editor.options?.previewElement) ||
+            document.getElementById("preview");
           const canvas = document.getElementById("canvasArea");
           if (preview && canvas) {
             canvas.classList.toggle("preview-active");

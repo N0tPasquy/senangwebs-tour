@@ -31,11 +31,60 @@ class Tour {
     this.isStarted = false;
     this.isDestroyed = false;
 
+    // Operation queue: serializes start()/navigateTo() so overlapping
+    // calls cannot interleave panoramas and hotspots.
+    this.operationQueue = Promise.resolve();
+    // Tracked timers so pending work can be cancelled on destroy()
+    this._timers = new Set();
+
     // Normalize scenes to array format (backward compatibility with object format)
     this.scenesArray = this.normalizeScenesArray(tourConfig.scenes);
 
     this.boundHandleHotspotClick = this.handleHotspotClick.bind(this);
     this.initializeRuntime();
+  }
+
+  /**
+   * Create a tracked timeout that is cancelled on destroy()
+   * @param {Function} fn
+   * @param {number} ms
+   * @returns {number} Timer id
+   */
+  addTimer(fn, ms) {
+    const id = setTimeout(() => {
+      this._timers.delete(id);
+      fn();
+    }, ms);
+    this._timers.add(id);
+    return id;
+  }
+
+  /**
+   * Run an operation serialized through the operation queue.
+   * Stale work after destroy() or a newer start() cannot commit state.
+   * @param {Function} fn - Async operation receiving the current epoch
+   * @returns {Promise}
+   */
+  enqueueOperation(fn) {
+    const run = this.operationQueue.then(() => {
+      if (this.isDestroyed) {
+        throw new Error("Tour instance was destroyed");
+      }
+      return fn();
+    });
+    // Keep the queue alive even when an operation fails
+    this.operationQueue = run.catch(() => {});
+    return run;
+  }
+
+  /**
+   * Check whether an operation from a given epoch is still current
+   * (the instance was neither destroyed nor re-initialized since)
+   * @param {number} epoch
+   * @returns {boolean}
+   */
+  isOperationValid(epoch) {
+    return !this.isDestroyed && this._epoch === epoch;
   }
 
   /**
@@ -62,6 +111,7 @@ class Tour {
 
     // Ensure cursor exists for interaction
     this.ensureCursor();
+    this._epoch = (this._epoch || 0) + 1;
     this.isDestroyed = false;
   }
 
@@ -124,98 +174,125 @@ class Tour {
 
   /**
    * Start the tour - Load the initial scene
+   * Operations are serialized; overlapping calls queue after the current one.
    * @returns {Promise}
    */
-  async start() {
-    if (this.isStarted) {
-      console.warn("Tour already started, cleaning up and restarting...");
-      this.destroy();
-    }
-
-    if (this.isDestroyed) {
-      this.initializeRuntime();
-    }
-
-    const initialSceneId = this.config.initialScene;
-    const initialSceneData = this.getSceneById(initialSceneId);
-
-    if (!initialSceneData) {
-      throw new Error(
-        `Initial scene "${initialSceneId}" not found in tour configuration`
-      );
-    }
-
-    try {
-      // Emit scene-loading event
-      this.emit("scene-loading", { sceneId: initialSceneId });
-
-      // Load the scene
-      await this.sceneManager.loadScene(initialSceneId, initialSceneData);
-
-      // Create hotspots
-      await this.hotspotManager.createHotspots(initialSceneData.hotspots || []);
-
-      this.isStarted = true;
-
-      // Set camera to starting position if set
-      if (initialSceneData.startingPosition) {
-        this.setCameraToStartingPosition(initialSceneData.startingPosition);
+  start() {
+    return this.enqueueOperation(async () => {
+      if (this.isStarted) {
+        console.warn("Tour already started, cleaning up and restarting...");
+        this.destroy();
       }
 
-      // Emit events
-      this.emit("scene-loaded", { sceneId: initialSceneId });
-      this.emit("tour-started", { sceneId: initialSceneId });
+      if (this.isDestroyed) {
+        this.initializeRuntime();
+      }
 
-      return Promise.resolve();
-    } catch (error) {
-      console.error("Failed to start tour:", error);
-      throw error;
-    }
+      // Capture epoch after possible re-initialization
+      const epoch = this._epoch;
+      const initialSceneId = this.config.initialScene;
+      const initialSceneData = this.getSceneById(initialSceneId);
+
+      if (!initialSceneData) {
+        throw new Error(
+          `Initial scene "${initialSceneId}" not found in tour configuration`
+        );
+      }
+
+      try {
+        // Emit scene-loading event
+        this.emit("scene-loading", { sceneId: initialSceneId });
+
+        // Load the scene
+        await this.sceneManager.loadScene(initialSceneId, initialSceneData);
+        if (!this.isOperationValid(epoch)) {
+          return;
+        }
+
+        // Create hotspots
+        await this.hotspotManager.createHotspots(initialSceneData.hotspots || []);
+        if (!this.isOperationValid(epoch)) {
+          return;
+        }
+
+        this.isStarted = true;
+
+        // Set camera to starting position if set
+        if (initialSceneData.startingPosition) {
+          this.setCameraToStartingPosition(initialSceneData.startingPosition);
+        }
+
+        // Emit events
+        this.emit("scene-loaded", { sceneId: initialSceneId });
+        this.emit("tour-started", { sceneId: initialSceneId });
+
+        return Promise.resolve();
+      } catch (error) {
+        console.error("Failed to start tour:", error);
+        throw error;
+      }
+    });
   }
 
   /**
    * Navigate to a specific scene
+   * Operations are serialized; overlapping calls queue after the current one.
+   * The previous scene (including its hotspots) is preserved if loading fails.
    * @param {string} sceneId - The ID of the scene to navigate to
    * @returns {Promise}
    */
-  async navigateTo(sceneId) {
-    const sceneData = this.getSceneById(sceneId);
+  navigateTo(sceneId) {
+    return this.enqueueOperation(async () => {
+      const epoch = this._epoch;
+      const sceneData = this.getSceneById(sceneId);
 
-    if (!sceneData) {
-      throw new Error(`Scene "${sceneId}" not found in tour configuration`);
-    }
+      if (!sceneData) {
+        throw new Error(`Scene "${sceneId}" not found in tour configuration`);
+      }
 
-    if (this.sceneManager.getCurrentSceneId() === sceneId) {
-      console.warn(`Already at scene "${sceneId}"`);
-      return Promise.resolve();
-    }
+      if (this.sceneManager.getCurrentSceneId() === String(sceneId)) {
+        console.warn(`Already at scene "${sceneId}"`);
+        return Promise.resolve();
+      }
 
-    try {
-      // Emit scene-loading event
-      this.emit("scene-loading", { sceneId: sceneId });
+      try {
+        // Emit scene-loading event
+        this.emit("scene-loading", { sceneId: sceneId });
 
-      // Remove old hotspots
-      this.hotspotManager.removeAllHotspots();
+        // Transition to new scene with callback to set camera position while
+        // screen is black. Old hotspots are removed only after the new
+        // panorama has loaded successfully, so a failed load preserves the
+        // previous scene's hotspots.
+        await this.sceneManager.transitionTo(sceneId, sceneData, () => {
+          if (!this.isOperationValid(epoch)) {
+            return;
+          }
+          this.hotspotManager.removeAllHotspots();
 
-      // Transition to new scene with callback to set camera position while screen is black
-      await this.sceneManager.transitionTo(sceneId, sceneData, () => {
-        // Set camera to starting position during transition (while screen is still black)
-        if (sceneData.startingPosition) {
-          this.setCameraToStartingPosition(sceneData.startingPosition);
+          // Set camera to starting position during transition (while screen is still black)
+          if (sceneData.startingPosition) {
+            this.setCameraToStartingPosition(sceneData.startingPosition);
+          }
+        });
+        if (!this.isOperationValid(epoch)) {
+          return;
         }
-      });
 
-      // Create new hotspots
-      await this.hotspotManager.createHotspots(sceneData.hotspots || []);
+        // Create new hotspots
+        await this.hotspotManager.createHotspots(sceneData.hotspots || []);
+        if (!this.isOperationValid(epoch)) {
+          return;
+        }
 
-      // Emit scene-loaded event
-      this.emit("scene-loaded", { sceneId: sceneId });
+        // Emit scene-loaded event
+        this.emit("scene-loaded", { sceneId: sceneId });
 
-      return Promise.resolve();
-    } catch (error) {
-      console.error(`Failed to navigate to scene "${sceneId}":`, error);
-      throw error;
-    }
+        return Promise.resolve();
+      } catch (error) {
+        console.error(`Failed to navigate to scene "${sceneId}":`, error);
+        throw error;
+      }
+    });
   }
 
   /**
@@ -287,9 +364,9 @@ class Tour {
 
     // Set immediately and retry a few times to ensure it sticks
     setRotation();
-    setTimeout(setRotation, 100);
-    setTimeout(setRotation, 300);
-    setTimeout(setRotation, 500);
+    this.addTimer(setRotation, 100);
+    this.addTimer(setRotation, 300);
+    this.addTimer(setRotation, 500);
   }
 
   /**
@@ -340,13 +417,19 @@ class Tour {
       return;
     }
 
+    // Mark destroyed first so pending queued operations abort
+    this.isDestroyed = true;
+
+    // Cancel outstanding timers (camera retries, etc.)
+    this.clearTimers();
+
     // Remove event listeners
     this.sceneEl.removeEventListener(
       "swt-hotspot-clicked",
       this.boundHandleHotspotClick
     );
 
-    // Clean up managers
+    // Clean up managers (also cancels transition timers and fade overlays)
     this.hotspotManager.destroy();
     this.sceneManager.destroy();
     this.assetManager.destroy();
@@ -357,7 +440,6 @@ class Tour {
     }
 
     this.isStarted = false;
-    this.isDestroyed = true;
   }
 }
 

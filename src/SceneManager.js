@@ -7,8 +7,30 @@ export class SceneManager {
     this.assetManager = assetManager;
     this.skyEl = null;
     this.currentSceneId = null;
+    this.currentSceneData = null;
     this.transitionDuration = 500; // milliseconds
+    this._timers = new Set();
     this.init();
+  }
+
+  /**
+   * Create a tracked timeout that is cancelled on destroy()
+   * @param {Function} fn
+   * @param {number} ms
+   * @returns {number} Timer id
+   */
+  addTimer(fn, ms) {
+    const id = setTimeout(() => {
+      this._timers.delete(id);
+      fn();
+    }, ms);
+    this._timers.add(id);
+    return id;
+  }
+
+  clearTimers() {
+    this._timers.forEach((id) => clearTimeout(id));
+    this._timers.clear();
   }
 
   init() {
@@ -28,13 +50,14 @@ export class SceneManager {
    * @returns {Promise} - Resolves when the scene is loaded
    */
   async loadScene(sceneId, sceneData) {
-    this.currentSceneId = sceneId;
-
     // Preload the panorama
     const panoramaUrl = sceneData.panorama;
     const assetId = `scene-${sceneId}`;
     
-    const isVideo = this.assetManager.isVideo(panoramaUrl);
+    const isVideo =
+      sceneData.mediaType === 'video' ||
+      sceneData.type === 'video' ||
+      this.assetManager.isVideo(panoramaUrl);
     
     if (isVideo) {
       await this.assetManager.preloadVideo(panoramaUrl, assetId);
@@ -55,6 +78,10 @@ export class SceneManager {
       }
     }
 
+    // Commit the scene change only after the panorama loaded successfully
+    this.currentSceneId = sceneId;
+    this.currentSceneData = sceneData;
+
     return Promise.resolve();
   }
 
@@ -69,18 +96,49 @@ export class SceneManager {
     // Fade out
     await this.fadeOut();
 
+    // Remember the previous scene so we can restore it if loading fails
+    const previousSceneId = this.currentSceneId;
+    const previousSceneData = this.currentSceneData;
+
     // Load new scene
-    await this.loadScene(sceneId, sceneData);
+    try {
+      await this.loadScene(sceneId, sceneData);
+    } catch (error) {
+      // Remove the fade overlay and restore the previous scene if we had one
+      this.removeFadeOverlay();
+      if (previousSceneData) {
+        try {
+          await this.loadScene(previousSceneId, previousSceneData);
+        } catch (restoreError) {
+          console.error('Failed to restore previous scene after navigation error:', restoreError);
+        }
+      }
+      throw error;
+    }
 
     // Call onSceneLoaded callback (e.g., to set camera position while screen is black)
     if (onSceneLoaded && typeof onSceneLoaded === 'function') {
       onSceneLoaded();
     }
 
-    // Fade in
-    await this.fadeIn();
+    // Fade in (guarantee overlay cleanup even if fade-in fails)
+    try {
+      await this.fadeIn();
+    } finally {
+      this.removeFadeOverlay();
+    }
 
     return Promise.resolve();
+  }
+
+  /**
+   * Immediately remove the fade overlay element, if present
+   */
+  removeFadeOverlay() {
+    const fadeEl = document.getElementById('swt-fade');
+    if (fadeEl && fadeEl.parentNode) {
+      fadeEl.parentNode.removeChild(fadeEl);
+    }
   }
 
   /**
@@ -115,7 +173,7 @@ export class SceneManager {
         easing: 'easeInQuad'
       });
 
-      setTimeout(() => {
+      this.addTimer(() => {
         resolve(fadeEl);
       }, this.transitionDuration);
     });
@@ -136,7 +194,7 @@ export class SceneManager {
           easing: 'easeOutQuad'
         });
 
-        setTimeout(() => {
+        this.addTimer(() => {
           if (fadeEl.parentNode) {
             fadeEl.parentNode.removeChild(fadeEl);
           }
@@ -160,9 +218,12 @@ export class SceneManager {
    * Clean up the scene manager
    */
   destroy() {
+    this.clearTimers();
+    this.removeFadeOverlay();
     if (this.skyEl && this.skyEl.parentNode) {
       this.skyEl.setAttribute('src', '');
     }
     this.currentSceneId = null;
+    this.currentSceneData = null;
   }
 }

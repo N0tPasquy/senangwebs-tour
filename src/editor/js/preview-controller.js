@@ -16,7 +16,9 @@ class PreviewController {
    * Initialize A-Frame preview
    */
   async init() {
-    this.previewContainer = document.getElementById("preview");
+    // Use the supplied preview element when provided; fall back to #preview
+    this.previewContainer =
+      this.editor.options.previewElement || document.getElementById("preview");
     if (!this.previewContainer) {
       console.error("Preview element not found");
       return false;

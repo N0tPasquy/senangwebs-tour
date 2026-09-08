@@ -13,7 +13,36 @@ const onwarn = (warning, warn) => {
 };
 
 export default [
-  // Viewer Library - Development build
+  // Viewer Library - ESM build (aframe stays external; consumers provide it via peer dependency)
+  {
+    input: 'src/index.js',
+    external: ['aframe'],
+    output: {
+      file: 'dist/swt.esm.js',
+      format: 'esm',
+      sourcemap: true
+    },
+    plugins: [
+      resolve()
+    ],
+    onwarn
+  },
+  // Viewer Library - CommonJS/UMD build for Node consumers (.cjs so Node
+  // treats it as CommonJS even though the package is "type": "module")
+  {
+    input: 'src/index.js',
+    output: {
+      file: 'dist/swt.cjs',
+      format: 'umd',
+      name: 'SWT',
+      sourcemap: true
+    },
+    plugins: [
+      resolve()
+    ],
+    onwarn
+  },
+  // Viewer Library - Development browser build
   {
     input: 'src/index.js',
     output: {

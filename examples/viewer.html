@@ -251,7 +251,11 @@
     </div>
 
     <!-- Tour Container -->
-    <div id="tour-container"></div>
+    <a-scene id="tour-container">
+      <a-camera look-controls>
+        <a-cursor></a-cursor>
+      </a-camera>
+    </a-scene>
 
     <!-- UI Overlay -->
     <div id="ui">
@@ -401,34 +405,55 @@
       }
 
       // Load tour
-      async function loadTour(config) {
+      async function loadTour(data) {
         try {
           showLoading("Initializing tour...");
 
-          tourConfig = config;
+          // Normalize imported data: accept both exported tour JSON
+          // ({ initialScene, scenes }) and editor project files
+          // ({ config: { initialSceneId }, scenes })
+          let config = data;
+          if (data.config && typeof data.config === "object") {
+            config = {
+              ...data.config,
+              initialScene:
+                data.config.initialSceneId || data.initialScene,
+              scenes: data.scenes,
+            };
+          } else if (!config.initialScene && config.initialSceneId) {
+            config.initialScene = config.initialSceneId;
+          }
 
           // Validate config
+          if (!config.initialScene) {
+            throw new Error("No initial scene defined in tour data");
+          }
           if (!config.scenes || config.scenes.length === 0) {
             throw new Error("No scenes found in tour data");
           }
 
-          // Create tour instance
-          tour = new SenangWebsTour("tour-container", config);
+          tourConfig = config;
 
-          // Setup event listeners
-          tour.on("sceneChanged", (sceneId) => {
-            updateSceneInfo();
-          });
+          // Create tour instance on the A-Frame scene element
+          const sceneEl = document.querySelector("#tour-container");
+          tour = new SWT.Tour(sceneEl, config);
 
-          tour.on("ready", () => {
+          // Setup event listeners (DOM CustomEvents on the scene element)
+          tour.addEventListener("tour-started", () => {
             hideLoading();
             ui.classList.add("show");
             updateSceneInfo();
           });
 
-          tour.on("error", (error) => {
-            console.error("Tour error:", error);
-            showError("Tour error: " + error.message);
+          tour.addEventListener("scene-loaded", () => {
+            updateSceneInfo();
+          });
+
+          tour.addEventListener("hotspot-activated", (e) => {
+            console.log(
+              "Hotspot activated:",
+              e.detail.hotspotData?.tooltip?.text
+            );
           });
 
           // Start tour
@@ -445,7 +470,10 @@
         if (!tour || !tourConfig) return;
 
         const sceneId = tour.getCurrentSceneId();
-        const scene = tourConfig.scenes.find((s) => s.id === sceneId);
+        const scenes = Array.isArray(tourConfig.scenes)
+          ? tourConfig.scenes
+          : Object.values(tourConfig.scenes);
+        const scene = scenes.find((s) => String(s.id) === String(sceneId));
 
         if (scene) {
           document.getElementById("sceneInfo").textContent =
