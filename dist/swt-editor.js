@@ -5094,7 +5094,7 @@
       }
     }
 
-    var version = "1.0.20";
+    var version = "1.0.21";
     var packageInfo = {
     	version: version};
 

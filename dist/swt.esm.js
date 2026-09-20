@@ -1079,6 +1079,11 @@ class Tour {
     return id;
   }
 
+  clearTimers() {
+    this._timers.forEach((id) => clearTimeout(id));
+    this._timers.clear();
+  }
+
   /**
    * Run an operation serialized through the operation queue.
    * Stale work after destroy() or a newer start() cannot commit state.
