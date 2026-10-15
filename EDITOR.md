@@ -120,7 +120,7 @@ The SWT editor uses a **six-controller pattern** with these main classes:
 | `TourEditor`            | Main coordinator, orchestrates all other components | `init()`, `render()`, `on()`, `off()`, `emit()`            |
 | `SceneManagerEditor`    | Scene CRUD operations                               | `addScene()`, `removeScene()`, `getScenes()`               |
 | `HotspotEditor`         | Hotspot placement and editing                       | `addHotspot()`, `updateHotspot()`, `removeHotspot()`       |
-| `PreviewController`     | A-Frame preview management                          | `loadScene()`, `pointCameraToHotspot()`                    |
+| `PreviewController`     | A-Frame preview management                          | `loadScene()`, `refreshHotspots()`, `pointCameraToHotspot()`|
 | `UIController`          | DOM rendering and updates                           | `renderSceneList()`, `renderHotspotList()`                 |
 | `ProjectStorageManager` | LocalStorage persistence                            | `saveProject()`, `loadProject()`                           |
 | `ExportManager`         | JSON and HTML export/import                         | `generateJSON()`, `loadJSON()`, `exportViewerHTML()`       |
@@ -250,28 +250,74 @@ editor.render(); // Update UI
 
 ### Custom Hotspot Placement
 
-```javascript
-// Enable hotspot placement mode
-hotspotEditor.enablePlacementMode();
+The editor supports three distinct hotspot action types:
 
-// Add hotspot at specific position
-const hotspot = {
-  id: "hotspot-1",
+#### 1. Classic Click Navigation (`navigateTo`)
+```javascript
+const navHotspot = {
+  id: "hotspot-nav-1",
   position: { x: 5, y: 1.5, z: -3 },
   action: {
     type: "navigateTo",
-    target: "scene-2",
+    target: "scene-kitchen",
   },
   appearance: {
     color: "#ff0000",
     scale: 1.2,
+    icon: "arrow-right",
   },
   tooltip: {
-    text: "Go to Kitchen",
+    text: "Vai alla Cucina",
   },
 };
+editor.addHotspot(navHotspot);
+```
 
-editor.addHotspot(hotspot);
+#### 2. Gaze Navigation (`gazeNavigate`)
+Hands-free VR navigation: holding the crosshair on the hotspot displays an animated countdown ring that automatically triggers navigation upon timer completion.
+```javascript
+const gazeHotspot = {
+  id: "hotspot-gaze-1",
+  position: { x: -4, y: 0.5, z: -4 },
+  action: {
+    type: "gazeNavigate",
+    target: "scene-garden",
+    duration: 3000, // Countdown in milliseconds (default: 3000)
+  },
+  appearance: {
+    color: "#3B82F6",
+    scale: 1.5,
+    icon: "arrow",
+  },
+  tooltip: {
+    text: "Fissa lo sguardo per esplorare il Giardino",
+  },
+};
+editor.addHotspot(gazeHotspot);
+```
+
+#### 3. Static Photo Hotspot (`photo`)
+Embeds photos in 3D space respecting their original aspect ratio. Clicking opens a full-screen accessible modal dialog.
+```javascript
+const photoHotspot = {
+  id: "hotspot-photo-1",
+  position: { x: 0, y: 1.0, z: -5 },
+  action: {
+    type: "photo",
+    url: "https://example.com/artwork-hd.jpg", // High-res image for modal
+    title: "Dipinto Rinascimentale",
+    description: "Olio su tela realizzato nel 1504, esposto nella galleria principale.",
+  },
+  appearance: {
+    icon: "data:image/jpeg;base64,...", // Lightweight thumbnail for 3D billboard
+    scale: 1.8,
+    aspectRatio: 1.778, // Preserves 16:9 native aspect ratio in 3D
+  },
+  tooltip: {
+    text: "Dipinto Rinascimentale",
+  },
+};
+editor.addHotspot(photoHotspot);
 ```
 
 ### Custom Export
@@ -610,14 +656,20 @@ The editor and viewer now use the **same data format**. Scenes are stored as an 
 | Property | Location | Description |
 |----------|----------|-------------|
 | `scenes` | Top level | Array of scene objects |
-| `panorama` | Scene | Image URL or base64 data URL |
-| `action.type` | Hotspot | `"navigateTo"` or `"showInfo"` |
-| `action.target` | Hotspot | Target scene ID |
+| `panorama` | Scene | Image URL or base64 data URL (max 8192px) |
+| `action.type` | Hotspot | `"navigateTo"`, `"gazeNavigate"`, or `"photo"` |
+| `action.target` | Hotspot | Target scene ID (for `navigateTo` & `gazeNavigate`) |
+| `action.duration` | Hotspot | Gaze countdown duration in ms (default: `3000`) |
+| `action.url` | Hotspot | High-res image URL or data URL for modal view (for `photo`) |
+| `action.title` | Hotspot | Optional modal header for photo view |
+| `action.description` | Hotspot | Optional modal caption for photo view |
 | `appearance.color` | Hotspot | Hotspot color (hex) |
-| `appearance.scale` | Hotspot | Scale string `"x y z"` |
-| `appearance.icon` | Hotspot | Icon name or URL |
-| `tooltip.text` | Hotspot | Title text |
-| `tooltip.description` | Hotspot | Description text |
+| `appearance.scale` | Hotspot | Scalar number (e.g. `1.5`) or 3D vector string `"x y z"` |
+| `appearance.icon` | Hotspot | Icon name, image URL, or 512px thumbnail data URL |
+| `appearance.aspectRatio` | Hotspot | Calculated width-to-height ratio for non-square photos |
+| `cameraOrientation` | Hotspot | Stored `{ pitch, yaw }` angles for camera pointing |
+| `tooltip.text` | Hotspot | Title text displayed on hover / billboard |
+| `tooltip.description` | Hotspot | Extended description text |
 
 ### Backward Compatibility
 
@@ -677,6 +729,13 @@ try {
   // Show user-friendly error message
 }
 ```
+
+### 5. Efficient Preview Updates (`refreshHotspots` vs `refresh`)
+
+To maintain high performance and avoid WebGL texture thrashing:
+- **Hotspot Content Updates:** When changing an icon, uploading a photo, or updating tooltip text, call `await previewController.refreshHotspots()`. This recreates only the lightweight hotspot entities in 2–5ms without destroying the WebGL context or reloading the heavy 360° panorama.
+- **Transform Sliders:** For interactive controls like scale sliders or coordinate adjustments, update element attributes directly in-place (`visualEl.setAttribute('scale', ...)`) to ensure butter-smooth 60 FPS response.
+- **Full Scene Reloads:** Reserve `previewController.loadScene()` exclusively for changing scenes or loading new panorama textures.
 
 ## Common Use Cases
 

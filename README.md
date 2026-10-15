@@ -35,7 +35,10 @@ A powerful, data-driven 360° virtual tour system built on A-Frame WebVR. Create
 - **Viewer Library** - JavaScript library for embedding tours
 - **Standalone Viewer** - HTML viewer with drag-and-drop JSON support
 - **Mobile & VR Ready** - Full touch, mouse, and VR headset support
-- **Customizable Hotspots** - Custom colors, scales, and tooltip text
+- **Gaze Navigation (Hands-Free VR)** - Automatic navigation upon holding gaze on a hotspot with animated circular countdown ring
+- **Static Photo Hotspots** - Place photos in 3D space maintaining native aspect ratio, with full-screen responsive white modal view
+- **Dynamic Hotspot Scaling** - Scale hotspots and photos with proportional tooltip position and dimension adjustment
+- **Customizable Hotspots** - Custom icons, colors, scales, and tooltip text
 - **Multiple Export Formats** - JSON configuration or standalone HTML files
 
 ### Developer-Friendly
@@ -312,13 +315,18 @@ Both the editor and viewer use the same data format. Scenes are stored as an **a
             z: -3
           },
           action: {                // Required: Hotspot action
-            type: "navigateTo",    // Required: Action type
-            target: "scene-id-2"   // Required: Target scene ID
+            type: "navigateTo",    // "navigateTo" | "gazeNavigate" | "photo"
+            target: "scene-id-2",  // Required for navigateTo & gazeNavigate: Target scene ID
+            duration: 3000,        // Optional for gazeNavigate: Countdown in ms (default: 3000)
+            url: "photo.jpg",      // Required for photo: High-res image URL or data URL
+            title: "Photo Title",  // Optional for photo: Modal title
+            description: "Details" // Optional for photo: Modal description text
           },
           appearance: {            // Optional: Visual customization
-            color: "#00ff00",      // Default: "#00ff00"
-            scale: "1 1 1",        // Default: "1 1 1"
-            icon: "arrow"          // Optional: Icon name or URL
+            color: "#00ff00",      // Default: "#00ff00" (or "#ffffff" for photos)
+            scale: "1.5 1.5 1.5",  // Scalar number (e.g. 1.5) or 3D vector string
+            icon: "arrow",         // Icon name, image URL, or thumbnail data URL
+            aspectRatio: 1.778     // Optional: Calculated aspect ratio (width / height) for photos
           },
           tooltip: {               // Optional: Hover/focus text
             text: "Click here",    // Tooltip title
@@ -408,6 +416,40 @@ The same instance can be started again with `tour.start()`.
 ```javascript
 tour.destroy(); // Cleanup before removing from DOM
 ```
+
+---
+
+##### `tour.openPhotoModal(actionData)`
+
+Open a full-screen responsive modal dialog displaying a static photo with title and description.
+The modal includes accessible styling (white background card, dismiss button, backdrop click, and Escape key).
+
+**Parameters:**
+
+- `actionData` (Object) - Object containing:
+  - `url` (String) - High-resolution image URL or data URL
+  - `title` (String, optional) - Modal heading
+  - `description` (String, optional) - Detailed caption or body text
+
+**Returns:** `void`
+
+**Example:**
+
+```javascript
+tour.openPhotoModal({
+  url: "assets/artwork.jpg",
+  title: "Ancient Sculpture",
+  description: "Discovered in the northern gallery during the 1924 excavation."
+});
+```
+
+---
+
+##### `tour.closePhotoModal()`
+
+Close the active photo modal dialog and clean up DOM listeners.
+
+**Returns:** `void`
 
 ---
 
@@ -559,15 +601,22 @@ setTimeout(() => {
 - **Click-to-Place Hotspots** - Raycast-based placement on panorama sphere
 - **Real-Time Preview** - Instant A-Frame rendering as you edit
 - **Scene Management** - Add, remove, reorder scenes with thumbnails
-- **Camera Control** - Auto-point camera to selected hotspot with animation
-- **Position Validation** - Hotspots clamped to 10-unit sphere radius
+- **Precise Camera Pointing (`🎯 Punta`)** - Smoothly orient the view directly to any selected hotspot in 3D space
+- **Smart Deselection** - Deselect hotspots by clicking empty sky or toggling the sidebar list item
+- **Protected Editor Mode** - Gaze countdowns and automatic navigation are safely deactivated in editor preview to prevent accidental scene changes while authoring
+- **Manual "Vai" Navigation** - Explicit `➔ Vai` button in the sidebar to test scene transitions on demand
 
-### Hotspot Configuration
+### Hotspot Configuration & Types
 
-- **3D Position** - Click-to-place or manual X/Y/Z coordinate input
-- **Navigation Target** - Link to any scene in the tour
-- **Visual Customization** - Color picker and scale slider
-- **Tooltips** - Custom hover text for each hotspot
+- **Three Action Types:**
+  - **Classic Navigation (`navigateTo`)** - Standard click/tap navigation to target scenes
+  - **Gaze Navigation (`gazeNavigate`)** - Hands-free VR navigation with customizable countdown timer (default: 3000ms) and animated circular countdown ring
+  - **Static Photo (`photo`)** - Embed photos in 3D space with native aspect ratio (16:9, 4:3, 9:16 portrait, etc.) and full-screen accessible modal viewer
+- **Photo Upload & Optimization** - Dual-resolution processing: 512px lightweight thumbnail for 3D billboard quad and up to 1920px HD data URL for modal view
+- **Dynamic Scale Controls** - Live slider (0.1x to 5.0x) and numeric input with automatic proportional tooltip scaling and height offset
+- **3D Position** - Click-to-place or manual X/Y/Z coordinate input (radius clamped to 5 units)
+- **Visual Customization** - Curated SenangStart icon grid or custom uploaded images, color picker, and real-time preview
+- **Tooltips** - Real-time title and description editing with proportional billboard placement
 
 ### Data Management
 

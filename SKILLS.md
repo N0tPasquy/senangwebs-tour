@@ -1,7 +1,7 @@
 ---
 name: senangwebs-tour
 description: A-Frame based 360-degree virtual tour system with a visual no-code editor and a lightweight embeddable viewer.
-version: 1.0.20
+version: 1.0.21
 package: senangwebs-tour
 ---
 
@@ -10,13 +10,13 @@ package: senangwebs-tour
 ## Quick Reference
 
 - **Purpose**: 360-degree virtual tour viewer and visual editor built on A-Frame WebVR
-- **Entry**: `dist/swt.js`
+- **Entry**: `dist/swt.js`, `dist/swt-editor.js`
 - **Dependencies**: `@bookklik/senangstart-icons`; peer: `aframe ^1.7.1`
 - **Scripts**: `npm run build` (rollup), `npm run dev` (rollup watch), `npm run serve` (http-server)
 
 ## Workflow
 
-Start in `C:\wamp64\www\sw-libraries\senangwebs-tour`. Read `README.md`, `package.json`, and touched source files. Match existing patterns, CSS prefix `swt-`. **A-Frame/WebVR library — verify 360 rendering and hotspot interaction after changes.**
+Start in the project workspace root. Read `README.md`, `EDITOR.md`, `package.json`, and touched source files. Match existing patterns, CSS prefix `swt-`. **A-Frame/WebVR library — verify 360 rendering and hotspot interaction after changes.**
 
 ## JavaScript API — Viewer
 
@@ -27,6 +27,8 @@ const tour = new SWT.Tour(sceneElement, config)
 tour.start()
 tour.navigateTo(sceneId)
 tour.getCurrentSceneId()
+tour.openPhotoModal(actionData)   // open static photo modal view
+tour.closePhotoModal()            // close photo modal view
 tour.destroy()
 tour.addEventListener('tour-started' | 'scene-loading' | 'scene-loaded' | 'hotspot-activated', callback)
 ```
@@ -42,10 +44,22 @@ calling `start()` again, including after `destroy()`. `destroy()` is idempotent.
     panorama: 'url-to-360-image.jpg',
     hotspots: [{
       position: { x, y, z },
-      action: { type: 'navigateTo', target: 'scene-id' },
-      appearance: { color, scale },
-      tooltip: { text: 'Hotspot label' },
-      cameraOrientation: { x, y, z }
+      action: {
+        type: 'navigateTo' | 'gazeNavigate' | 'photo',
+        target: 'scene-id',       // for navigateTo & gazeNavigate
+        duration: 3000,           // for gazeNavigate (ms countdown)
+        url: 'photo-hd.jpg',      // for photo modal view
+        title: 'Title',           // optional for photo
+        description: 'Details'    // optional for photo
+      },
+      appearance: {
+        color: '#ff0000',
+        scale: '1.5 1.5 1.5',    // scalar number or vector string
+        icon: 'arrow',            // icon name, URL, or thumbnail
+        aspectRatio: 1.778        // calculated width/height for photos
+      },
+      tooltip: { text: 'Hotspot label', description: 'Details' },
+      cameraOrientation: { pitch, yaw }
     }]
   }]
 }
@@ -58,7 +72,7 @@ calling `start()` again, including after `destroy()`. `destroy()` is idempotent.
 TourEditor              // main editor controller
 SceneManagerEditor      // scene CRUD
 HotspotEditor           // hotspot placement/editing
-PreviewController       // live preview
+PreviewController       // live preview & refreshHotspots()
 UIController            // UI panels
 ProjectStorageManager   // save/load projects
 ExportManager           // export to JSON or standalone HTML
@@ -67,12 +81,15 @@ ExportManager           // export to JSON or standalone HTML
 ## Focus Areas
 
 - A-Frame scene management: panorama spheres, camera rig, hotspot entities
-- Visual editor: click-to-place hotspots on 360 panoramas, drag to reposition
-- Lightweight viewer: 12KB minified, standalone HTML export
-- Hotspot interactions: navigate between scenes, open links, show info panels
-- Mobile and VR-ready: works with Cardboard, Oculus, etc.
+- Visual editor: click-to-place hotspots on 360 panoramas, drag to reposition, `🎯 Punta` button
+- Gaze navigation: hands-free VR navigation with circular countdown ring and configurable timer
+- Static photo hotspots: 3D photo planes preserving native aspect ratio with full-screen modal view
+- Hotspot resizing: live slider scaling with automatic proportional billboard tooltip adaptation
+- Lightweight viewer: standalone HTML export with baked icon SVG data URLs
+- Hotspot interactions: navigate between scenes, gaze countdown, open photo modals
+- Mobile and VR-ready: touch, mouse, Cardboard, Oculus, WebXR
 - JSON export/import for project portability
-- Asset loading: progressive panorama loading
+- High performance: `refreshHotspots()` DOM updates without tearing down WebGL or reloading 360 panoramas
 
 ## Implementation Guidance
 
@@ -87,6 +104,7 @@ ExportManager           // export to JSON or standalone HTML
 ## Validation
 
 ```bash
-npm run build      # rollup build
-npm run serve      # http-server on port 8080 for manual testing
+npm run build                      # rollup build
+node tests/test-gaze-navigation.js  # 49 unit tests covering gaze, photo, scale, export
+npm run serve                      # http-server on port 8080/8089 for manual testing
 ```
