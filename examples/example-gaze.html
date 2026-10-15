@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>SenangWebs Tour - Gaze Navigation Demo</title>
+    <script src="../dist/swt.js"></script>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        overflow: hidden;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        background: #000;
+        -webkit-tap-highlight-color: transparent;
+      }
+
+      /* Container covers nothing, leaves touches completely free for A-Frame canvas */
+      #hud {
+        position: fixed;
+        top: 12px;
+        left: 12px;
+        z-index: 9999;
+        pointer-events: none;
+      }
+
+      /* Compact floating pill - minimal footprint on mobile screens */
+      .hud-pill {
+        pointer-events: auto;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        background: rgba(15, 23, 42, 0.88);
+        color: #f1f5f9;
+        padding: 6px 14px;
+        border-radius: 9999px;
+        font-size: 12px;
+        font-weight: 600;
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+        cursor: pointer;
+        user-select: none;
+        touch-action: manipulation;
+        transition: transform 0.15s ease, background 0.2s ease;
+      }
+
+      .hud-pill:active {
+        transform: scale(0.96);
+      }
+
+      .hud-pill-badge {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #38bdf8;
+        box-shadow: 0 0 8px #38bdf8;
+      }
+
+      .hud-pill-arrow {
+        color: #94a3b8;
+        font-size: 10px;
+        margin-left: 2px;
+      }
+
+      /* Detailed info card - opens on click/tap, never steals clicks outside */
+      .hud-card {
+        pointer-events: auto;
+        display: none;
+        margin-top: 8px;
+        background: rgba(15, 23, 42, 0.94);
+        color: #f1f5f9;
+        padding: 14px 16px;
+        border-radius: 14px;
+        box-shadow: 0 12px 36px rgba(0, 0, 0, 0.6);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        max-width: 320px;
+        width: calc(100vw - 24px);
+        animation: fadeIn 0.2s ease-out;
+      }
+
+      .hud-card.open {
+        display: block;
+      }
+
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(-6px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      .hud-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 10px;
+        padding-bottom: 8px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+      }
+
+      .hud-title {
+        font-size: 14px;
+        font-weight: 700;
+        margin: 0;
+        color: #38bdf8;
+      }
+
+      .hud-close-btn {
+        background: rgba(255, 255, 255, 0.1);
+        border: none;
+        color: #cbd5e1;
+        border-radius: 6px;
+        width: 24px;
+        height: 24px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 14px;
+        cursor: pointer;
+        padding: 0;
+        line-height: 1;
+      }
+
+      .hud-close-btn:active {
+        background: rgba(255, 255, 255, 0.2);
+      }
+
+      .hud-card p {
+        font-size: 12px;
+        margin: 6px 0;
+        color: #cbd5e1;
+        line-height: 1.45;
+      }
+
+      .badge {
+        display: inline-block;
+        padding: 2px 7px;
+        border-radius: 5px;
+        font-size: 10px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        vertical-align: middle;
+      }
+
+      .badge-gaze {
+        background: rgba(56, 189, 248, 0.25);
+        color: #38bdf8;
+        border: 1px solid rgba(56, 189, 248, 0.5);
+      }
+
+      .badge-std {
+        background: rgba(34, 197, 94, 0.25);
+        color: #22c55e;
+        border: 1px solid rgba(34, 197, 94, 0.5);
+      }
+
+      #event-log {
+        margin-top: 10px;
+        padding-top: 8px;
+        border-top: 1px solid rgba(255, 255, 255, 0.1);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 10px;
+        color: #94a3b8;
+        max-height: 70px;
+        overflow-y: auto;
+      }
+
+      .log-item {
+        margin: 2px 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      @media (max-width: 480px) {
+        #hud {
+          top: 8px;
+          left: 8px;
+        }
+        .hud-pill {
+          font-size: 11px;
+          padding: 5px 11px;
+        }
+        .hud-card {
+          width: calc(100vw - 16px);
+          max-width: 300px;
+          padding: 12px 14px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Floating Minimal HUD -->
+    <div id="hud">
+      <div class="hud-pill" id="hudPill" onclick="toggleHud()">
+        <span class="hud-pill-badge"></span>
+        <span id="pill-scene-name">Room 1</span>
+        <span class="hud-pill-arrow" id="hudArrow">▾</span>
+      </div>
+
+      <div class="hud-card" id="hudCard">
+        <div class="hud-header">
+          <span class="hud-title">Gaze Navigation Demo</span>
+          <button class="hud-close-btn" type="button" onclick="toggleHud()" aria-label="Chiudi">✕</button>
+        </div>
+        <p>
+          <span class="badge badge-gaze">Gaze (Blu)</span> Mantieni lo sguardo per 3s. Apparirà il cerchio di caricamento attorno al reticolo.
+        </p>
+        <p>
+          <span class="badge badge-std">Standard (Verde)</span> Punta e <strong>tocca lo schermo</strong> (click/tap) per navigare. Non parte con lo sguardo.
+        </p>
+        <div id="event-log">
+          <div class="log-item">Pronto. Tocca lo schermo o punta lo sguardo.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- A-Frame Scene -->
+    <a-scene id="tour-scene">
+      <a-camera look-controls>
+        <!-- fuse explicitly disabled so standard hotspots require genuine touch/click -->
+        <a-cursor fuse="false" cursor="fuse: false; fuseTimeout: 0;"></a-cursor>
+      </a-camera>
+    </a-scene>
+
+    <script>
+      function toggleHud() {
+        const card = document.getElementById("hudCard");
+        const arrow = document.getElementById("hudArrow");
+        const isOpen = card.classList.toggle("open");
+        if (arrow) {
+          arrow.textContent = isOpen ? "▴" : "▾";
+        }
+      }
+
+      function log(msg) {
+        const el = document.getElementById("event-log");
+        if (!el) return;
+        const item = document.createElement("div");
+        item.className = "log-item";
+        item.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+        el.prepend(item);
+      }
+
+      const tourConfig = {
+        initialScene: "scene1",
+        scenes: [
+          {
+            id: "scene1",
+            name: "Room 1 (City View)",
+            panorama: "https://cdn.aframe.io/360-image-gallery-boilerplate/img/city.jpg",
+            hotspots: [
+              {
+                id: "gaze-to-scene2",
+                position: { x: 3, y: 0.5, z: -5 },
+                action: {
+                  type: "gazeNavigate",
+                  target: "scene2",
+                  duration: 3000
+                },
+                appearance: {
+                  color: "#38bdf8",
+                  scale: "1.5 1.5 1.5"
+                },
+                tooltip: {
+                  text: "Guarda per 3s (Gaze)"
+                }
+              },
+              {
+                id: "std-to-scene2",
+                position: { x: -3, y: 0.5, z: -5 },
+                action: {
+                  type: "navigateTo",
+                  target: "scene2"
+                },
+                appearance: {
+                  color: "#22c55e",
+                  scale: "1.5 1.5 1.5"
+                },
+                tooltip: {
+                  text: "Tocca lo schermo (Click)"
+                }
+              }
+            ]
+          },
+          {
+            id: "scene2",
+            name: "Room 2 (Cubes View)",
+            panorama: "https://cdn.aframe.io/360-image-gallery-boilerplate/img/cubes.jpg",
+            hotspots: [
+              {
+                id: "gaze-to-scene1",
+                position: { x: 0, y: 0.5, z: 5 },
+                action: {
+                  type: "gazeNavigate",
+                  target: "scene1",
+                  duration: 3000
+                },
+                appearance: {
+                  color: "#38bdf8",
+                  scale: "1.5 1.5 1.5"
+                },
+                tooltip: {
+                  text: "Guarda per tornare (3s)"
+                }
+              }
+            ]
+          }
+        ]
+      };
+
+      const sceneEl = document.querySelector("#tour-scene");
+      sceneEl.addEventListener("loaded", () => {
+        const tour = new SWT.Tour(sceneEl, tourConfig);
+
+        tour.addEventListener("scene-loaded", (e) => {
+          const sceneName = e.detail.sceneId === "scene1" ? "Room 1" : "Room 2";
+          const pillLabel = document.getElementById("pill-scene-name");
+          if (pillLabel) pillLabel.textContent = sceneName;
+          log(`Scena caricata: ${e.detail.sceneId}`);
+        });
+
+        tour.addEventListener("hotspot-activated", (e) => {
+          log(`Click su standard: ${e.detail.hotspotData?.id}`);
+        });
+
+        tour.addEventListener("gaze-activated", (e) => {
+          log(`Gaze completato su: ${e.detail.hotspotData?.id}`);
+        });
+
+        tour.start().then(() => {
+          log("Tour avviato con successo");
+        });
+      });
+    </script>
+  </body>
+</html>

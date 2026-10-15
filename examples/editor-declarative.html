@@ -173,6 +173,28 @@
                 </div>
 
                 <div class="form-group">
+                  <label class="form-label">Interaction Type</label>
+                  <select id="hotspotActionType" class="form-select">
+                    <option value="navigateTo">Standard (Click / Touch)</option>
+                    <option value="gazeNavigate">Gaze Navigation (Timer)</option>
+                  </select>
+                </div>
+
+                <div class="form-group" id="hotspotGazeDurationGroup" style="display: none;">
+                  <label class="form-label">Gaze Duration (ms)</label>
+                  <input
+                    type="number"
+                    id="hotspotGazeDuration"
+                    class="form-input"
+                    value="3000"
+                    min="500"
+                    max="10000"
+                    step="100"
+                    placeholder="3000"
+                  />
+                </div>
+
+                <div class="form-group">
                   <label class="form-label">Color</label>
                   <div class="color-picker-group">
                     <input

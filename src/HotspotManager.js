@@ -1,6 +1,5 @@
-/**
- * HotspotManager - Creates, manages, and removes hotspot entities in the A-Frame scene
- */
+import { isGazeHotspot } from './GazeManager.js';
+
 export class HotspotManager {
   constructor(sceneEl, assetManager, defaultHotspotSettings = {}, iconRenderer = null) {
     this.sceneEl = sceneEl;
@@ -160,8 +159,12 @@ export class HotspotManager {
    * @param {number} index - Hotspot index
    */
   createHotspot(hotspot, index) {
+    const isGaze = isGazeHotspot(hotspot);
     const hotspotEl = document.createElement('a-entity');
     hotspotEl.classList.add('swt-hotspot');
+    if (isGaze) {
+      hotspotEl.classList.add('swt-gaze-hotspot');
+    }
     
     // Set position
     const pos = hotspot.position;
@@ -204,10 +207,25 @@ export class HotspotManager {
     // Add cursor interaction
     visualEl.setAttribute('class', 'clickable');
 
-    // Add the swt-hotspot-listener component
-    visualEl.setAttribute('swt-hotspot-listener', {
-      hotspotData: JSON.stringify(hotspot)
-    });
+    // Attach appropriate component based on hotspot type
+    if (isGaze) {
+      visualEl.setAttribute('swt-gaze-hotspot', {
+        hotspotData: JSON.stringify(hotspot)
+      });
+
+      // Add distinctive outer gaze ring indicator around the hotspot
+      const gazeRing = document.createElement('a-ring');
+      gazeRing.setAttribute('id', `swt-gaze-ring-${index}`);
+      gazeRing.setAttribute('radius-inner', '0.62');
+      gazeRing.setAttribute('radius-outer', '0.72');
+      gazeRing.setAttribute('material', `color: ${color}; side: double; transparent: true; opacity: 0.85; shader: flat`);
+      gazeRing.setAttribute('swt-billboard', 'enabled: true');
+      hotspotEl.appendChild(gazeRing);
+    } else {
+      visualEl.setAttribute('swt-hotspot-listener', {
+        hotspotData: JSON.stringify(hotspot)
+      });
+    }
 
     hotspotEl.appendChild(visualEl);
     this.sceneEl.appendChild(hotspotEl);

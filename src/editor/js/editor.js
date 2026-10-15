@@ -223,6 +223,25 @@ class TourEditor {
         document.getElementById('hotspotTarget')?.addEventListener('change', (e) => {
             this.updateCurrentHotspot('action.target', e.target.value);
         });
+
+        document.getElementById('hotspotActionType')?.addEventListener('change', (e) => {
+            const actionType = e.target.value;
+            this.updateCurrentHotspot('action.type', actionType);
+            const gazeGroup = document.getElementById('hotspotGazeDurationGroup');
+            if (gazeGroup) {
+                gazeGroup.style.display = actionType === 'gazeNavigate' ? 'block' : 'none';
+            }
+            if (actionType === 'gazeNavigate') {
+                const durInput = document.getElementById('hotspotGazeDuration');
+                const dur = durInput ? parseInt(durInput.value, 10) || 3000 : 3000;
+                this.updateCurrentHotspot('action.duration', dur);
+            }
+        });
+
+        document.getElementById('hotspotGazeDuration')?.addEventListener('input', debounce((e) => {
+            const dur = Math.max(100, parseInt(e.target.value, 10) || 3000);
+            this.updateCurrentHotspot('action.duration', dur);
+        }, 300));
         
         document.getElementById('hotspotColor')?.addEventListener('input', (e) => {
             this.updateCurrentHotspot('appearance.color', e.target.value);

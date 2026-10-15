@@ -13,7 +13,7 @@ class HotspotEditor {
      * @param {string} targetSceneId - Target scene ID for navigation
      * @param {Object} cameraOrientation - Camera orientation at creation {pitch, yaw} in radians
      */
-    addHotspot(position, targetSceneId = '', cameraOrientation = null) {
+    addHotspot(position, targetSceneId = '', cameraOrientation = null, actionType = 'navigateTo', duration = 3000) {
         const scene = this.editor.sceneManager.getCurrentScene();
         if (!scene) {
             showToast('No scene selected', 'error');
@@ -26,16 +26,17 @@ class HotspotEditor {
             position: position,
             cameraOrientation: cameraOrientation,
             action: {
-                type: 'navigateTo',
-                target: targetSceneId
+                type: actionType,
+                target: targetSceneId,
+                ...(actionType === 'gazeNavigate' ? { duration } : {})
             },
             appearance: {
-                color: '#00ff00',
+                color: actionType === 'gazeNavigate' ? '#4CC3D9' : '#00ff00',
                 scale: '1 1 1',
                 icon: ''
             },
             tooltip: {
-                text: 'New Hotspot',
+                text: actionType === 'gazeNavigate' ? 'New Gaze Hotspot' : 'New Hotspot',
                 description: ''
             }
         };

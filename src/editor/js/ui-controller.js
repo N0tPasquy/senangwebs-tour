@@ -246,6 +246,16 @@ class UIController {
     titleEl.className = "hotspot-title";
     titleEl.textContent = title;
 
+    // Check if this is a gaze navigation hotspot and add visual badge
+    const isGaze = hotspot.action?.type === 'gazeNavigate' || hotspot.type === 'gazeNavigate' || hotspot.type === 'gaze';
+    if (isGaze) {
+      const durationSec = ((hotspot.action?.duration || 3000) / 1000).toFixed(1);
+      const badge = document.createElement("span");
+      badge.className = "hotspot-badge badge-gaze";
+      badge.textContent = `Gaze ${durationSec}s`;
+      titleEl.appendChild(badge);
+    }
+
     const target = document.createElement("div");
     target.className = "hotspot-target";
     if (targetSceneId) {
@@ -387,6 +397,12 @@ class UIController {
       if (posY) posY.value = "";
       const posZ = this.getEl("hotspotPosZ");
       if (posZ) posZ.value = "";
+      const actionType = this.getEl("hotspotActionType");
+      if (actionType) actionType.value = "navigateTo";
+      const gazeDurationGroup = this.getEl("hotspotGazeDurationGroup");
+      if (gazeDurationGroup) gazeDurationGroup.style.display = "none";
+      const gazeDuration = this.getEl("hotspotGazeDuration");
+      if (gazeDuration) gazeDuration.value = "3000";
       return;
     }
 
@@ -430,6 +446,21 @@ class UIController {
 
     // Update target dropdown
     this.updateTargetSceneOptions();
+
+    // Update Action Type and Gaze Duration controls
+    const isGaze = hotspot.action?.type === 'gazeNavigate' || hotspot.type === 'gazeNavigate' || hotspot.type === 'gaze';
+    const actionTypeEl = this.getEl("hotspotActionType");
+    if (actionTypeEl) {
+      actionTypeEl.value = isGaze ? "gazeNavigate" : "navigateTo";
+    }
+    const gazeDurationGroup = this.getEl("hotspotGazeDurationGroup");
+    if (gazeDurationGroup) {
+      gazeDurationGroup.style.display = isGaze ? "block" : "none";
+    }
+    const gazeDurationEl = this.getEl("hotspotGazeDuration");
+    if (gazeDurationEl) {
+      gazeDurationEl.value = hotspot.action?.duration || 3000;
+    }
   }
 
   /**

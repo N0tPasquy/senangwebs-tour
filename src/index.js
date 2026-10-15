@@ -6,10 +6,12 @@
 import AFRAME from "aframe";
 import "@bookklik/senangstart-icons/dist/senangstart-icon.min.js";
 import "./components/hotspot-listener.js";
+import "./components/gaze-components.js";
 import { AssetManager } from "./AssetManager.js";
 import { SceneManager } from "./SceneManager.js";
 import { HotspotManager } from "./HotspotManager.js";
 import { IconRenderer } from "./IconRenderer.js";
+import { GazeManager, isGazeHotspot } from "./GazeManager.js";
 
 /**
  * Main Tour class - The public API for the SWT library
@@ -114,6 +116,8 @@ class Tour {
       this.boundHandleHotspotClick
     );
 
+    this.gazeManager = new GazeManager(this, this.sceneEl);
+
     // Ensure cursor exists for interaction
     this.ensureCursor();
     this._epoch = (this._epoch || 0) + 1;
@@ -159,20 +163,47 @@ class Tour {
         return; // Cursor disabled
     }
 
-    const camera = this.sceneEl.querySelector("[camera]");
+    const camera = this.sceneEl.querySelector("[camera]") || this.sceneEl.querySelector("a-camera");
     if (camera) {
       // If config is a selector string, try to find it
       if (typeof cursorConfig === 'string') {
-        if (document.querySelector(cursorConfig) || camera.querySelector(cursorConfig)) {
+        const customCursor = document.querySelector(cursorConfig) || camera.querySelector(cursorConfig);
+        if (customCursor) {
             return; // Custom cursor exists
         }
       }
 
-      let cursor = camera.querySelector("[cursor]");
+      let cursor = camera.querySelector("[cursor]") || camera.querySelector("a-cursor");
       if (!cursor) {
         cursor = document.createElement("a-cursor");
-        cursor.setAttribute("fuse", "false");
         camera.appendChild(cursor);
+      }
+
+      // Strictly enforce fuse: false so A-Frame does NOT trigger auto-fuse clicks on mobile (iOS/Android default)
+      cursor.setAttribute("fuse", "false");
+      cursor.setAttribute("cursor", "fuse: false; fuseTimeout: 0;");
+
+      const disableFuse = () => {
+        if (cursor.components && cursor.components.cursor) {
+          cursor.components.cursor.data.fuse = false;
+          cursor.components.cursor.data.fuseTimeout = 0;
+          if (cursor.components.cursor.fuseTimeout) {
+            clearTimeout(cursor.components.cursor.fuseTimeout);
+          }
+        }
+      };
+
+      disableFuse();
+      cursor.addEventListener("componentinitialized", (evt) => {
+        if (evt.detail?.name === "cursor") {
+          disableFuse();
+        }
+      });
+
+      if (this.sceneEl.hasLoaded) {
+        disableFuse();
+      } else {
+        this.sceneEl.addEventListener("loaded", disableFuse, { once: true });
       }
     }
   }
@@ -205,6 +236,11 @@ class Tour {
       }
 
       try {
+        // Cancel active gaze countdown during scene loading
+        if (this.gazeManager) {
+          this.gazeManager.onSceneLoading();
+        }
+
         // Emit scene-loading event
         this.emit("scene-loading", { sceneId: initialSceneId });
 
@@ -230,6 +266,10 @@ class Tour {
         // Emit events
         this.emit("scene-loaded", { sceneId: initialSceneId });
         this.emit("tour-started", { sceneId: initialSceneId });
+
+        if (this.gazeManager) {
+          this.gazeManager.onSceneLoaded();
+        }
 
         return Promise.resolve();
       } catch (error) {
@@ -261,6 +301,11 @@ class Tour {
       }
 
       try {
+        // Cancel active gaze countdown during scene loading
+        if (this.gazeManager) {
+          this.gazeManager.onSceneLoading();
+        }
+
         // Emit scene-loading event
         this.emit("scene-loading", { sceneId: sceneId });
 
@@ -292,6 +337,10 @@ class Tour {
         // Emit scene-loaded event
         this.emit("scene-loaded", { sceneId: sceneId });
 
+        if (this.gazeManager) {
+          this.gazeManager.onSceneLoaded();
+        }
+
         return Promise.resolve();
       } catch (error) {
         console.error(`Failed to navigate to scene "${sceneId}":`, error);
@@ -311,6 +360,7 @@ class Tour {
     // Emit hotspot-activated event
     this.emit("hotspot-activated", {
       hotspotData: hotspotData,
+      hotspotId: hotspotData?.id,
       sceneId: currentSceneId,
     });
 
@@ -332,6 +382,10 @@ class Tour {
             console.error("Navigation failed:", err);
           });
         }
+        break;
+
+      case "gazeNavigate":
+        // Handled exclusively by GazeManager on gaze countdown completion
         break;
 
       default:
@@ -435,6 +489,10 @@ class Tour {
     );
 
     // Clean up managers (also cancels transition timers and fade overlays)
+    if (this.gazeManager) {
+      this.gazeManager.destroy();
+      this.gazeManager = null;
+    }
     this.hotspotManager.destroy();
     this.sceneManager.destroy();
     this.assetManager.destroy();
@@ -449,10 +507,12 @@ class Tour {
 }
 
 // Export the Tour class as the main API
-export { Tour };
+export { Tour, GazeManager, isGazeHotspot };
 
 // Also attach to window for UMD usage
 if (typeof window !== "undefined") {
   window.SWT = window.SWT || {};
   window.SWT.Tour = Tour;
+  window.SWT.GazeManager = GazeManager;
+  window.SWT.isGazeHotspot = isGazeHotspot;
 }

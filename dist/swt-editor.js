@@ -1009,7 +1009,7 @@
          * @param {string} targetSceneId - Target scene ID for navigation
          * @param {Object} cameraOrientation - Camera orientation at creation {pitch, yaw} in radians
          */
-        addHotspot(position, targetSceneId = '', cameraOrientation = null) {
+        addHotspot(position, targetSceneId = '', cameraOrientation = null, actionType = 'navigateTo', duration = 3000) {
             const scene = this.editor.sceneManager.getCurrentScene();
             if (!scene) {
                 showToast('No scene selected', 'error');
@@ -1022,16 +1022,17 @@
                 position: position,
                 cameraOrientation: cameraOrientation,
                 action: {
-                    type: 'navigateTo',
-                    target: targetSceneId
+                    type: actionType,
+                    target: targetSceneId,
+                    ...(actionType === 'gazeNavigate' ? { duration } : {})
                 },
                 appearance: {
-                    color: '#00ff00',
+                    color: actionType === 'gazeNavigate' ? '#4CC3D9' : '#00ff00',
                     scale: '1 1 1',
                     icon: ''
                 },
                 tooltip: {
-                    text: 'New Hotspot',
+                    text: actionType === 'gazeNavigate' ? 'New Gaze Hotspot' : 'New Hotspot',
                     description: ''
                 }
             };
@@ -4614,6 +4615,16 @@
         titleEl.className = "hotspot-title";
         titleEl.textContent = title;
 
+        // Check if this is a gaze navigation hotspot and add visual badge
+        const isGaze = hotspot.action?.type === 'gazeNavigate' || hotspot.type === 'gazeNavigate' || hotspot.type === 'gaze';
+        if (isGaze) {
+          const durationSec = ((hotspot.action?.duration || 3000) / 1000).toFixed(1);
+          const badge = document.createElement("span");
+          badge.className = "hotspot-badge badge-gaze";
+          badge.textContent = `Gaze ${durationSec}s`;
+          titleEl.appendChild(badge);
+        }
+
         const target = document.createElement("div");
         target.className = "hotspot-target";
         if (targetSceneId) {
@@ -4755,6 +4766,12 @@
           if (posY) posY.value = "";
           const posZ = this.getEl("hotspotPosZ");
           if (posZ) posZ.value = "";
+          const actionType = this.getEl("hotspotActionType");
+          if (actionType) actionType.value = "navigateTo";
+          const gazeDurationGroup = this.getEl("hotspotGazeDurationGroup");
+          if (gazeDurationGroup) gazeDurationGroup.style.display = "none";
+          const gazeDuration = this.getEl("hotspotGazeDuration");
+          if (gazeDuration) gazeDuration.value = "3000";
           return;
         }
 
@@ -4798,6 +4815,21 @@
 
         // Update target dropdown
         this.updateTargetSceneOptions();
+
+        // Update Action Type and Gaze Duration controls
+        const isGaze = hotspot.action?.type === 'gazeNavigate' || hotspot.type === 'gazeNavigate' || hotspot.type === 'gaze';
+        const actionTypeEl = this.getEl("hotspotActionType");
+        if (actionTypeEl) {
+          actionTypeEl.value = isGaze ? "gazeNavigate" : "navigateTo";
+        }
+        const gazeDurationGroup = this.getEl("hotspotGazeDurationGroup");
+        if (gazeDurationGroup) {
+          gazeDurationGroup.style.display = isGaze ? "block" : "none";
+        }
+        const gazeDurationEl = this.getEl("hotspotGazeDuration");
+        if (gazeDurationEl) {
+          gazeDurationEl.value = hotspot.action?.duration || 3000;
+        }
       }
 
       /**
@@ -5270,7 +5302,7 @@
   <body>
     <a-scene id="tour-container">
       <a-camera look-controls>
-        <a-cursor></a-cursor>
+        <a-cursor fuse="false" cursor="fuse: false; fuseTimeout: 0;"></a-cursor>
       </a-camera>
     </a-scene>
 
@@ -5559,6 +5591,25 @@
             document.getElementById('hotspotTarget')?.addEventListener('change', (e) => {
                 this.updateCurrentHotspot('action.target', e.target.value);
             });
+
+            document.getElementById('hotspotActionType')?.addEventListener('change', (e) => {
+                const actionType = e.target.value;
+                this.updateCurrentHotspot('action.type', actionType);
+                const gazeGroup = document.getElementById('hotspotGazeDurationGroup');
+                if (gazeGroup) {
+                    gazeGroup.style.display = actionType === 'gazeNavigate' ? 'block' : 'none';
+                }
+                if (actionType === 'gazeNavigate') {
+                    const durInput = document.getElementById('hotspotGazeDuration');
+                    const dur = durInput ? parseInt(durInput.value, 10) || 3000 : 3000;
+                    this.updateCurrentHotspot('action.duration', dur);
+                }
+            });
+
+            document.getElementById('hotspotGazeDuration')?.addEventListener('input', debounce((e) => {
+                const dur = Math.max(100, parseInt(e.target.value, 10) || 3000);
+                this.updateCurrentHotspot('action.duration', dur);
+            }, 300));
             
             document.getElementById('hotspotColor')?.addEventListener('input', (e) => {
                 this.updateCurrentHotspot('appearance.color', e.target.value);

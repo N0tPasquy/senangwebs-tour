@@ -23,7 +23,9 @@
   "scripts": {
     "build": "rollup -c",
     "dev": "rollup -c -w",
-    "serve": "http-server -p 8080"
+    "serve": "http-server -p 8089 -c-1",
+    "serve:https": "http-server -S -C cert.pem -K key.pem -p 8089 -c-1",
+    "test": "node tests/test-gaze-navigation.js"
   },
   "keywords": [
     "aframe",
