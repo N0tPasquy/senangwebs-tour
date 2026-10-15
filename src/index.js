@@ -206,6 +206,16 @@ class Tour {
         this.sceneEl.addEventListener("loaded", disableFuse, { once: true });
       }
     }
+
+    // Ensure mouse/touch direct click cursor exists for seamless desktop and mobile interactions
+    if (this.config.mouseCursor !== false && !this.sceneEl.querySelector("#swt-mouse-cursor")) {
+      const mouseCursor = document.createElement("a-entity");
+      mouseCursor.setAttribute("id", "swt-mouse-cursor");
+      mouseCursor.setAttribute("cursor", "rayOrigin: mouse;");
+      mouseCursor.setAttribute("raycaster", "objects: .clickable;");
+      this.sceneEl.appendChild(mouseCursor);
+      this.mouseCursorEl = mouseCursor;
+    }
   }
 
   /**
@@ -500,6 +510,12 @@ class Tour {
     // Clean up icon renderer
     if (this.iconRenderer) {
       this.iconRenderer.destroy();
+    }
+
+    // Clean up mouse cursor if created by the tour
+    if (this.mouseCursorEl && this.mouseCursorEl.parentNode) {
+      this.mouseCursorEl.parentNode.removeChild(this.mouseCursorEl);
+      this.mouseCursorEl = null;
     }
 
     this.isStarted = false;

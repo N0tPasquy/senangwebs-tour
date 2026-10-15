@@ -108,18 +108,36 @@ if (typeof AFRAME !== 'undefined') {
     },
 
     onMouseEnter: function (evt) {
+      // Gaze must originate from the camera/reticle cursor, not mouse cursor
+      const cursorEl = evt.detail?.cursorEl;
+      if (cursorEl && (cursorEl.id === 'swt-mouse-cursor' || cursorEl.getAttribute?.('cursor')?.rayOrigin === 'mouse')) {
+        return;
+      }
       this.handleEnter();
     },
 
     onMouseLeave: function (evt) {
+      const cursorEl = evt.detail?.cursorEl;
+      if (cursorEl && (cursorEl.id === 'swt-mouse-cursor' || cursorEl.getAttribute?.('cursor')?.rayOrigin === 'mouse')) {
+        return;
+      }
       this.handleLeave();
     },
 
     onRaycasterIntersected: function (evt) {
+      // Gaze must originate from the camera/reticle cursor, not mouse cursor
+      const raycasterEl = evt.detail?.el;
+      if (raycasterEl && (raycasterEl.id === 'swt-mouse-cursor' || raycasterEl.getAttribute?.('cursor')?.rayOrigin === 'mouse')) {
+        return;
+      }
       this.handleEnter();
     },
 
     onRaycasterIntersectedCleared: function (evt) {
+      const raycasterEl = evt.detail?.el;
+      if (raycasterEl && (raycasterEl.id === 'swt-mouse-cursor' || raycasterEl.getAttribute?.('cursor')?.rayOrigin === 'mouse')) {
+        return;
+      }
       this.handleLeave();
     },
 

@@ -80467,18 +80467,36 @@ void main() {
 	    },
 
 	    onMouseEnter: function (evt) {
+	      // Gaze must originate from the camera/reticle cursor, not mouse cursor
+	      const cursorEl = evt.detail?.cursorEl;
+	      if (cursorEl && (cursorEl.id === 'swt-mouse-cursor' || cursorEl.getAttribute?.('cursor')?.rayOrigin === 'mouse')) {
+	        return;
+	      }
 	      this.handleEnter();
 	    },
 
 	    onMouseLeave: function (evt) {
+	      const cursorEl = evt.detail?.cursorEl;
+	      if (cursorEl && (cursorEl.id === 'swt-mouse-cursor' || cursorEl.getAttribute?.('cursor')?.rayOrigin === 'mouse')) {
+	        return;
+	      }
 	      this.handleLeave();
 	    },
 
 	    onRaycasterIntersected: function (evt) {
+	      // Gaze must originate from the camera/reticle cursor, not mouse cursor
+	      const raycasterEl = evt.detail?.el;
+	      if (raycasterEl && (raycasterEl.id === 'swt-mouse-cursor' || raycasterEl.getAttribute?.('cursor')?.rayOrigin === 'mouse')) {
+	        return;
+	      }
 	      this.handleEnter();
 	    },
 
 	    onRaycasterIntersectedCleared: function (evt) {
+	      const raycasterEl = evt.detail?.el;
+	      if (raycasterEl && (raycasterEl.id === 'swt-mouse-cursor' || raycasterEl.getAttribute?.('cursor')?.rayOrigin === 'mouse')) {
+	        return;
+	      }
 	      this.handleLeave();
 	    },
 
@@ -82087,6 +82105,16 @@ void main() {
 	        this.sceneEl.addEventListener("loaded", disableFuse, { once: true });
 	      }
 	    }
+
+	    // Ensure mouse/touch direct click cursor exists for seamless desktop and mobile interactions
+	    if (this.config.mouseCursor !== false && !this.sceneEl.querySelector("#swt-mouse-cursor")) {
+	      const mouseCursor = document.createElement("a-entity");
+	      mouseCursor.setAttribute("id", "swt-mouse-cursor");
+	      mouseCursor.setAttribute("cursor", "rayOrigin: mouse;");
+	      mouseCursor.setAttribute("raycaster", "objects: .clickable;");
+	      this.sceneEl.appendChild(mouseCursor);
+	      this.mouseCursorEl = mouseCursor;
+	    }
 	  }
 
 	  /**
@@ -82381,6 +82409,12 @@ void main() {
 	    // Clean up icon renderer
 	    if (this.iconRenderer) {
 	      this.iconRenderer.destroy();
+	    }
+
+	    // Clean up mouse cursor if created by the tour
+	    if (this.mouseCursorEl && this.mouseCursorEl.parentNode) {
+	      this.mouseCursorEl.parentNode.removeChild(this.mouseCursorEl);
+	      this.mouseCursorEl = null;
 	    }
 
 	    this.isStarted = false;
