@@ -75,8 +75,30 @@ export class HotspotManager {
       const textEl = this.tooltipEl.querySelector('a-text');
       textEl.setAttribute('value', text);
       
-      // Position tooltip above the hotspot
-      const offsetY = 1.5;
+      // Parse scale factor (default 1)
+      const rawScale = hotspotData.appearance?.scale;
+      let scaleFactor = 1;
+      if (typeof rawScale === 'number' && isFinite(rawScale)) {
+        scaleFactor = rawScale;
+      } else if (typeof rawScale === 'string') {
+        const firstPart = parseFloat(rawScale.trim().split(/\s+/)[0]);
+        if (isFinite(firstPart) && firstPart > 0) scaleFactor = firstPart;
+      }
+
+      // Scale the tooltip proportionally (bounded between 0.6x and 3.0x for legibility)
+      const tooltipScale = Math.min(Math.max(scaleFactor * 0.9, 0.6), 3.0);
+      this.tooltipEl.setAttribute('scale', `${tooltipScale} ${tooltipScale} ${tooltipScale}`);
+
+      // Calculate half-height of the hotspot for exact positioning
+      const isPhoto = hotspotData.action?.type === 'photo' || hotspotData.type === 'photo';
+      let elementHalfHeight = 0.5;
+      if (isPhoto) {
+        const aspect = hotspotData.appearance?.aspectRatio || 1;
+        elementHalfHeight = aspect >= 1 ? (1.5 / aspect) * 0.5 : 1.5 * 0.5;
+      }
+
+      // Position tooltip nicely above the top edge of the scaled hotspot
+      const offsetY = (elementHalfHeight * scaleFactor) + (tooltipScale * 0.45);
       this.tooltipEl.setAttribute('position', `${position.x} ${position.y + offsetY} ${position.z}`);
       this.tooltipEl.setAttribute('visible', 'true');
       
@@ -114,7 +136,8 @@ export class HotspotManager {
     // (IconRenderer uses a shared renderContainer that would be corrupted by parallel generation)
     for (let index = 0; index < hotspots.length; index++) {
       const hotspot = hotspots[index];
-      const icon = hotspot.appearance?.icon || this.defaultSettings.icon;
+      const isPhoto = hotspot.action?.type === 'photo' || hotspot.type === 'photo';
+      const icon = hotspot.appearance?.icon || (isPhoto ? hotspot.action?.url : null) || this.defaultSettings.icon;
       const color = hotspot.appearance?.color || '#ffffff';
       
       if (!icon) continue;
@@ -128,7 +151,17 @@ export class HotspotManager {
       if (isImageUrl) {
         // Preload as image asset
         try {
-          await this.assetManager.preloadImage(icon, assetId);
+          const imgAsset = await this.assetManager.preloadImage(icon, assetId);
+          if (isPhoto && imgAsset) {
+            const nw = imgAsset.naturalWidth || imgAsset.width;
+            const nh = imgAsset.naturalHeight || imgAsset.height;
+            if (nw && nh && nh > 0) {
+              hotspot.appearance = hotspot.appearance || {};
+              if (!hotspot.appearance.aspectRatio) {
+                hotspot.appearance.aspectRatio = nw / nh;
+              }
+            }
+          }
         } catch (err) {
           console.warn(`Failed to load icon for hotspot ${index}, will use color instead`);
         }
@@ -160,10 +193,13 @@ export class HotspotManager {
    */
   createHotspot(hotspot, index) {
     const isGaze = isGazeHotspot(hotspot);
+    const isPhoto = hotspot.action?.type === 'photo' || hotspot.type === 'photo';
     const hotspotEl = document.createElement('a-entity');
     hotspotEl.classList.add('swt-hotspot');
     if (isGaze) {
       hotspotEl.classList.add('swt-gaze-hotspot');
+    } else if (isPhoto) {
+      hotspotEl.classList.add('swt-photo-hotspot');
     }
     
     // Set position
@@ -171,8 +207,8 @@ export class HotspotManager {
     hotspotEl.setAttribute('position', `${pos.x} ${pos.y} ${pos.z}`);
 
     // Get icon and color
-    const icon = hotspot.appearance?.icon || this.defaultSettings.icon;
-    const color = hotspot.appearance?.color || '#4CC3D9';
+    const icon = hotspot.appearance?.icon || (isPhoto ? hotspot.action?.url : null) || this.defaultSettings.icon;
+    const color = hotspot.appearance?.color || (isPhoto ? '#ffffff' : '#4CC3D9');
     
     // Check if we have a preloaded icon asset (either from URL or generated from icon name)
     // Use the unique asset prefix that includes scene load counter
@@ -183,11 +219,62 @@ export class HotspotManager {
     let visualEl;
     
     // Check if icon asset was successfully loaded/generated
-    if (icon && assetEl) {
+    if (icon) {
       visualEl = document.createElement('a-image');
-      visualEl.setAttribute('src', `#${assetId}`);
-      // Make images double-sided
-      visualEl.setAttribute('material', 'side: double; transparent: true; alphaTest: 0.1');
+      visualEl.setAttribute('src', assetEl ? `#${assetId}` : icon);
+      // Billboards always face the camera; side: front and flat shader optimize GPU fill rate and prevent lag
+      visualEl.setAttribute('material', 'side: front; transparent: true; alphaTest: 0.05; shader: flat');
+
+      if (isPhoto) {
+        // Compute proper width and height respecting original aspect ratio
+        let aspect = hotspot.appearance?.aspectRatio;
+        if (!aspect && assetEl) {
+          const nw = assetEl.naturalWidth || assetEl.width;
+          const nh = assetEl.naturalHeight || assetEl.height;
+          if (nw && nh && nh > 0) {
+            aspect = nw / nh;
+            hotspot.appearance = hotspot.appearance || {};
+            hotspot.appearance.aspectRatio = aspect;
+          }
+        }
+        aspect = aspect || 1;
+
+        let w = 1.5;
+        let h = 1.5;
+        if (aspect >= 1) {
+          h = 1.5 / aspect;
+        } else {
+          w = 1.5 * aspect;
+        }
+        visualEl.setAttribute('width', w.toFixed(3));
+        visualEl.setAttribute('height', h.toFixed(3));
+
+        // Fallback: when texture loads asynchronously, re-apply natural aspect ratio if needed
+        visualEl.addEventListener('materialtextureloaded', () => {
+          const texture = visualEl.getObject3D('mesh')?.material?.map;
+          if (texture && texture.image) {
+            const nw = texture.image.naturalWidth || texture.image.width;
+            const nh = texture.image.naturalHeight || texture.image.height;
+            if (nw && nh && nh > 0) {
+              const loadedAspect = nw / nh;
+              let tw = 1.5;
+              let th = 1.5;
+              if (loadedAspect >= 1) {
+                th = 1.5 / loadedAspect;
+              } else {
+                tw = 1.5 * loadedAspect;
+              }
+              visualEl.setAttribute('width', tw.toFixed(3));
+              visualEl.setAttribute('height', th.toFixed(3));
+              hotspot.appearance = hotspot.appearance || {};
+              hotspot.appearance.aspectRatio = loadedAspect;
+            }
+          }
+        });
+      } else {
+        visualEl.setAttribute('width', '1');
+        visualEl.setAttribute('height', '1');
+      }
     } else {
       // Fallback to a colored plane
       visualEl = document.createElement('a-plane');
@@ -218,6 +305,7 @@ export class HotspotManager {
       gazeRing.setAttribute('id', `swt-gaze-ring-${index}`);
       gazeRing.setAttribute('radius-inner', '0.62');
       gazeRing.setAttribute('radius-outer', '0.72');
+      gazeRing.setAttribute('scale', this.normalizeScale(hotspot.appearance?.scale ?? this.defaultSettings.scale));
       gazeRing.setAttribute('material', `color: ${color}; side: double; transparent: true; opacity: 0.85; shader: flat`);
       gazeRing.setAttribute('swt-billboard', 'enabled: true');
       hotspotEl.appendChild(gazeRing);
@@ -264,6 +352,22 @@ export class HotspotManager {
     this.removeHotspotIconAssets();
     
     this.activeHotspots.forEach(hotspot => {
+      if (hotspot.object3D) {
+        hotspot.object3D.traverse((child) => {
+          if (child.geometry) child.geometry.dispose();
+          if (child.material) {
+            if (Array.isArray(child.material)) {
+              child.material.forEach((m) => {
+                if (m.map) m.map.dispose();
+                m.dispose();
+              });
+            } else {
+              if (child.material.map) child.material.map.dispose();
+              child.material.dispose();
+            }
+          }
+        });
+      }
       if (hotspot.parentNode) {
         hotspot.parentNode.removeChild(hotspot);
       }

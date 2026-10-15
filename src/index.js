@@ -182,6 +182,7 @@ class Tour {
       // Strictly enforce fuse: false so A-Frame does NOT trigger auto-fuse clicks on mobile (iOS/Android default)
       cursor.setAttribute("fuse", "false");
       cursor.setAttribute("cursor", "fuse: false; fuseTimeout: 0;");
+      cursor.setAttribute("raycaster", "objects: .clickable;");
 
       const disableFuse = () => {
         if (cursor.components && cursor.components.cursor) {
@@ -374,6 +375,11 @@ class Tour {
       sceneId: currentSceneId,
     });
 
+    // In editor mode, navigation actions are disabled (use "Vai" in sidebar)
+    if (this.config.isEditor) {
+      return;
+    }
+
     // Handle the action
     if (hotspotData.action) {
       this.handleAction(hotspotData.action);
@@ -398,9 +404,223 @@ class Tour {
         // Handled exclusively by GazeManager on gaze countdown completion
         break;
 
+      case "photo":
+      case "image":
+        this.openPhotoModal(action);
+        break;
+
       default:
         console.warn(`Unknown action type: ${action.type}`);
     }
+  }
+
+  /**
+   * Open modal view displaying a static photo in large format with description
+   * White background card for optimal readability
+   * @param {Object} actionData - Action object containing url, title, description
+   */
+  openPhotoModal(actionData) {
+    if (!actionData) return;
+    this.closePhotoModal();
+
+    const imageUrl = actionData.url || actionData.imageUrl || "";
+    const title = actionData.title || "";
+    const description = actionData.description || "";
+
+    const escapeText = (str) =>
+      str ? String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;") : "";
+
+    this.ensurePhotoModalStyles();
+
+    const modal = document.createElement("div");
+    modal.id = "swt-photo-modal";
+    modal.className = "swt-photo-modal-overlay";
+    modal.setAttribute("role", "dialog");
+    modal.setAttribute("aria-modal", "true");
+
+    modal.innerHTML = `
+      <div class="swt-photo-modal-card">
+        <button type="button" class="swt-photo-modal-close" aria-label="Chiudi">✕</button>
+        <div class="swt-photo-modal-content">
+          ${imageUrl ? `
+            <div class="swt-photo-modal-img-wrap">
+              <img class="swt-photo-modal-img" src="${imageUrl}" alt="${escapeText(title) || 'Foto'}" />
+            </div>
+          ` : ""}
+          ${(title || description) ? `
+            <div class="swt-photo-modal-info">
+              ${title ? `<h3 class="swt-photo-modal-title">${escapeText(title)}</h3>` : ""}
+              ${description ? `<p class="swt-photo-modal-desc">${escapeText(description)}</p>` : ""}
+            </div>
+          ` : ""}
+        </div>
+      </div>
+    `;
+
+    const closeBtn = modal.querySelector(".swt-photo-modal-close");
+    closeBtn?.addEventListener("click", () => this.closePhotoModal());
+
+    modal.addEventListener("click", (e) => {
+      if (e.target === modal) {
+        this.closePhotoModal();
+      }
+    });
+
+    this._onModalKeyDown = (e) => {
+      if (e.key === "Escape") {
+        this.closePhotoModal();
+      }
+    };
+    window.addEventListener("keydown", this._onModalKeyDown);
+
+    document.body.appendChild(modal);
+    this.photoModalEl = modal;
+  }
+
+  /**
+   * Close the active photo modal view
+   */
+  closePhotoModal() {
+    if (this._onModalKeyDown) {
+      window.removeEventListener("keydown", this._onModalKeyDown);
+      this._onModalKeyDown = null;
+    }
+    if (this.photoModalEl && this.photoModalEl.parentNode) {
+      this.photoModalEl.parentNode.removeChild(this.photoModalEl);
+    }
+    const existing = document.getElementById("swt-photo-modal");
+    if (existing && existing.parentNode) {
+      existing.parentNode.removeChild(existing);
+    }
+    this.photoModalEl = null;
+  }
+
+  /**
+   * Ensure responsive CSS styles for photo modal view exist in DOM
+   */
+  ensurePhotoModalStyles() {
+    if (typeof document === "undefined" || document.getElementById("swt-photo-modal-styles")) return;
+    const style = document.createElement("style");
+    style.id = "swt-photo-modal-styles";
+    style.textContent = `
+      .swt-photo-modal-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 999999;
+        background: rgba(15, 23, 42, 0.78);
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 16px;
+        box-sizing: border-box;
+        animation: swtModalFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      }
+      @keyframes swtModalFadeIn {
+        from { opacity: 0; transform: scale(0.97); }
+        to { opacity: 1; transform: scale(1); }
+      }
+      .swt-photo-modal-card {
+        position: relative;
+        background: #ffffff !important;
+        color: #0f172a !important;
+        border-radius: 16px;
+        box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(0, 0, 0, 0.05);
+        max-width: 860px;
+        width: 100%;
+        max-height: 88vh;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        box-sizing: border-box;
+      }
+      .swt-photo-modal-close {
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        z-index: 10;
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        background: rgba(0, 0, 0, 0.08);
+        border: none;
+        color: #0f172a;
+        font-size: 16px;
+        font-weight: 700;
+        line-height: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: background 0.15s, transform 0.15s;
+      }
+      .swt-photo-modal-close:hover {
+        background: rgba(0, 0, 0, 0.15);
+        transform: scale(1.06);
+      }
+      .swt-photo-modal-content {
+        display: flex;
+        flex-direction: column;
+        max-height: 88vh;
+        overflow-y: auto;
+        padding: 20px;
+        box-sizing: border-box;
+      }
+      .swt-photo-modal-img-wrap {
+        width: 100%;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        background: #f8fafc;
+        border-radius: 10px;
+        overflow: hidden;
+        margin-bottom: 14px;
+        min-height: 120px;
+      }
+      .swt-photo-modal-img {
+        max-width: 100%;
+        max-height: 60vh;
+        object-fit: contain;
+        display: block;
+      }
+      .swt-photo-modal-info {
+        padding: 4px 6px 12px 6px;
+      }
+      .swt-photo-modal-title {
+        margin: 0 0 8px 0;
+        font-size: 18px;
+        font-weight: 700;
+        color: #0f172a !important;
+        line-height: 1.35;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      }
+      .swt-photo-modal-desc {
+        margin: 0;
+        font-size: 14px;
+        line-height: 1.6;
+        color: #334155 !important;
+        white-space: pre-wrap;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      }
+      @media (max-width: 600px) {
+        .swt-photo-modal-overlay {
+          padding: 10px;
+        }
+        .swt-photo-modal-card {
+          border-radius: 12px;
+          max-height: 92vh;
+        }
+        .swt-photo-modal-content {
+          padding: 14px;
+          max-height: 92vh;
+        }
+        .swt-photo-modal-img {
+          max-height: 50vh;
+        }
+      }
+    `;
+    document.head.appendChild(style);
   }
 
   /**
@@ -517,6 +737,9 @@ class Tour {
       this.mouseCursorEl.parentNode.removeChild(this.mouseCursorEl);
       this.mouseCursorEl = null;
     }
+
+    // Clean up photo modal if open
+    this.closePhotoModal();
 
     this.isStarted = false;
   }

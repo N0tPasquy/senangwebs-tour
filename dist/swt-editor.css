@@ -728,6 +728,12 @@ body {
   border: 1px solid rgba(76, 195, 217, 0.4);
 }
 
+.badge-photo {
+  background: rgba(234, 179, 8, 0.2);
+  color: #eab308;
+  border: 1px solid rgba(234, 179, 8, 0.4);
+}
+
 .hotspot-actions {
   display: flex;
   gap: 4px;
@@ -1077,6 +1083,11 @@ body {
   border-color: var(--accent-primary);
   background: rgba(0, 255, 153, 0.1);
   color: var(--accent-primary);
+}
+
+input[type="range"] {
+  accent-color: var(--accent-primary, #4cc3d9);
+  cursor: pointer;
 }
 
 /* Responsive */

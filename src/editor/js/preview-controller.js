@@ -159,10 +159,26 @@ class PreviewController {
               (h) => h.id === hotspotId
             );
             if (hotspotIndex >= 0) {
-              this.editor.selectHotspot(hotspotIndex);
+              if (this.editor.hotspotEditor.currentHotspotIndex === hotspotIndex) {
+                return;
+              }
+              // Select hotspot in sidebar WITHOUT moving camera (user is already looking at it)
+              this.editor.selectHotspot(hotspotIndex, false);
             }
           }
         }
+      });
+
+      // Clicking on empty sky deselects current hotspot
+      aframeScene.addEventListener("click", (e) => {
+        if (e.target && e.target.tagName && e.target.tagName.toLowerCase() === "a-sky") {
+          this.editor.selectHotspot(-1);
+        }
+      });
+
+      // Cancel camera animation immediately on user mouse interaction
+      this.previewContainer.addEventListener("mousedown", () => {
+        this.cancelCameraAnimation();
       });
 
       // Start the tour
@@ -412,7 +428,8 @@ class PreviewController {
       pitch = Math.asin(direction.y / distance) * (180 / Math.PI);
 
       // Yaw (left/right rotation around Y-axis) - in degrees
-      yaw = Math.atan2(direction.x, direction.z) * (180 / Math.PI);
+      // Looking forward in A-Frame is -Z, so yaw = atan2(-x, -z)
+      yaw = Math.atan2(-direction.x, -direction.z) * (180 / Math.PI);
     } else {
       return;
     }
@@ -422,11 +439,23 @@ class PreviewController {
   }
 
   /**
+   * Cancel ongoing camera animation
+   */
+  cancelCameraAnimation() {
+    if (this.cameraAnimationId) {
+      cancelAnimationFrame(this.cameraAnimationId);
+      this.cameraAnimationId = null;
+    }
+  }
+
+  /**
    * Animate camera rotation smoothly
    * Uses look-controls internal pitchObject/yawObject to avoid being overwritten
    */
   animateCameraRotation(camera, targetRotation, duration = 800) {
     if (!camera || !camera.object3D) return;
+
+    this.cancelCameraAnimation();
 
     // Get look-controls component
     const lookControls = camera.components?.["look-controls"];
@@ -486,11 +515,13 @@ class PreviewController {
       }
 
       if (progress < 1) {
-        requestAnimationFrame(animate);
+        this.cameraAnimationId = requestAnimationFrame(animate);
+      } else {
+        this.cameraAnimationId = null;
       }
     };
 
-    animate();
+    this.cameraAnimationId = requestAnimationFrame(animate);
   }
 
   /**
@@ -502,7 +533,20 @@ class PreviewController {
   }
 
   /**
-   * Update hotspot marker (refresh scene while preserving camera rotation)
+   * Refresh all hotspots in current scene without reloading the 360 panorama or destroying WebGL
+   */
+  async refreshHotspots() {
+    const scene = this.editor.sceneManager.getCurrentScene();
+    if (!scene || !this.tour || !this.tour.hotspotManager) {
+      await this.refresh();
+      return;
+    }
+    this.tour.hotspotManager.removeAllHotspots();
+    await this.tour.hotspotManager.createHotspots(scene.hotspots || []);
+  }
+
+  /**
+   * Update hotspot marker (updates in place when element exists, avoiding scene reload and lag)
    */
   async updateHotspotMarker(index) {
     const scene = this.editor.sceneManager.getCurrentScene();
@@ -511,8 +555,69 @@ class PreviewController {
     const hotspot = scene.hotspots[index];
     if (!hotspot) return;
 
-    // Refresh the preview to reflect changes, camera rotation will be preserved
-    await this.refresh();
+    const activeHotspotEl = this.tour.hotspotManager?.activeHotspots?.[index];
+    if (activeHotspotEl) {
+      // Update position in-place
+      const pos = hotspot.position;
+      activeHotspotEl.setAttribute('position', `${pos.x} ${pos.y} ${pos.z}`);
+
+      // Update scale in-place
+      const normScale = this.tour.hotspotManager.normalizeScale(hotspot.appearance?.scale);
+      const visualEl = activeHotspotEl.querySelector('.clickable') || activeHotspotEl.querySelector('a-image, a-plane');
+      if (visualEl) {
+        visualEl.setAttribute('scale', normScale);
+        if (visualEl.hasAttribute('swt-gaze-hotspot')) {
+          visualEl.setAttribute('swt-gaze-hotspot', {
+            hotspotData: JSON.stringify(hotspot)
+          });
+        }
+        if (visualEl.hasAttribute('swt-hotspot-listener')) {
+          visualEl.setAttribute('swt-hotspot-listener', {
+            hotspotData: JSON.stringify(hotspot)
+          });
+        }
+        if (hotspot.appearance?.color && visualEl.tagName.toLowerCase() === 'a-plane') {
+          visualEl.setAttribute('color', hotspot.appearance.color);
+        }
+      }
+
+      const gazeRing = activeHotspotEl.querySelector('a-ring');
+      if (gazeRing) {
+        gazeRing.setAttribute('scale', normScale);
+        if (hotspot.appearance?.color) {
+          gazeRing.setAttribute('material', `color: ${hotspot.appearance.color}; side: double; transparent: true; opacity: 0.85; shader: flat`);
+        }
+      }
+
+      // Update tooltip position and scale in-place if tooltip is currently visible
+      const tooltipEl = this.tour.hotspotManager?.tooltipEl;
+      if (tooltipEl && tooltipEl.getAttribute('visible') === 'true') {
+        const rawScale = hotspot.appearance?.scale;
+        let scaleFactor = 1;
+        if (typeof rawScale === 'number' && isFinite(rawScale)) {
+          scaleFactor = rawScale;
+        } else if (typeof rawScale === 'string') {
+          const firstPart = parseFloat(rawScale.trim().split(/\s+/)[0]);
+          if (isFinite(firstPart) && firstPart > 0) scaleFactor = firstPart;
+        }
+        const tooltipScale = Math.min(Math.max(scaleFactor * 0.9, 0.6), 3.0);
+        tooltipEl.setAttribute('scale', `${tooltipScale} ${tooltipScale} ${tooltipScale}`);
+
+        let elementHalfHeight = 0.5;
+        const isPhoto = hotspot.action?.type === 'photo' || hotspot.type === 'photo';
+        if (isPhoto) {
+          const aspect = hotspot.appearance?.aspectRatio || 1;
+          elementHalfHeight = aspect >= 1 ? (1.5 / aspect) * 0.5 : 1.5 * 0.5;
+        }
+        const offsetY = (elementHalfHeight * scaleFactor) + (tooltipScale * 0.45);
+        tooltipEl.setAttribute('position', `${pos.x} ${pos.y + offsetY} ${pos.z}`);
+      }
+
+      return;
+    }
+
+    // Fallback to refreshHotspots if element doesn't exist yet
+    await this.refreshHotspots();
   }
 
   /**

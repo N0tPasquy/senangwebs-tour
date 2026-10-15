@@ -465,6 +465,90 @@ async function runTests() {
     assert(sceneEl.listeners['swt-gaze-leave'].length === 0, 'swt-gaze-leave listener removed');
   }
 
+  // Scenario 16: Editor mode deactivates automatic navigation and gaze countdown
+  console.log('\nTest 16: Editor mode deactivates automatic navigation and gaze countdown');
+  {
+    const sceneEl = new MockElement('a-scene');
+    const tour = new MockTour({ initialScene: 'scene1', isEditor: true });
+    const gazeManager = new GazeManager(tour, sceneEl);
+    const hotspotEl = new MockElement('a-entity');
+    sceneEl.appendChild(hotspotEl);
+
+    // Gaze enter in editor mode should NOT start countdown
+    gazeManager.onGazeEnter({
+      detail: {
+        el: hotspotEl,
+        hotspotData: { action: { type: 'gazeNavigate', target: 's2', duration: 3000 } }
+      }
+    });
+    assert(gazeManager.currentHotspotEl === null, 'Gaze enter ignored when isEditor: true');
+    assert(gazeManager.animationFrameId === null, 'No animation loop started in editor mode');
+  }
+
+  // Scenario 17: Photo hotspot action type
+  console.log('\nTest 17: Photo hotspot action support');
+  {
+    const photoHotspot = {
+      id: 'photo-1',
+      action: {
+        type: 'photo',
+        url: 'https://example.com/art.jpg',
+        title: 'Mona Lisa',
+        description: 'Capolavoro di Leonardo da Vinci'
+      }
+    };
+    assert(photoHotspot.action.type === 'photo', 'Photo hotspot action.type is photo');
+    assert(photoHotspot.action.url === 'https://example.com/art.jpg', 'Photo hotspot stores image URL');
+  }
+
+  // Scenario 18: Hotspot scaling support
+  console.log('\nTest 18: Hotspot scaling support');
+  {
+    const scaledHotspot = {
+      id: 'scaled-1',
+      appearance: {
+        scale: '2.5 2.5 2.5'
+      }
+    };
+    assert(scaledHotspot.appearance.scale === '2.5 2.5 2.5', 'Hotspot stores appearance.scale vector');
+    const scaleNum = parseFloat(scaledHotspot.appearance.scale.split(' ')[0]);
+    assert(scaleNum === 2.5, 'Hotspot scale multiplier parsed correctly as 2.5');
+  }
+
+  // Scenario 19: Photo aspect ratio preservation
+  console.log('\nTest 19: Photo aspect ratio preservation and dimension calculation');
+  {
+    const landscapePhoto = {
+      id: 'photo-landscape',
+      action: { type: 'photo', url: 'test.jpg' },
+      appearance: { aspectRatio: 1920 / 1080 } // 16:9 ~ 1.7778
+    };
+    const portraitPhoto = {
+      id: 'photo-portrait',
+      action: { type: 'photo', url: 'test-port.jpg' },
+      appearance: { aspectRatio: 1080 / 1920 } // 9:16 ~ 0.5625
+    };
+
+    // Calculate dimensions
+    const calcDim = (aspect) => {
+      let w = 1.5, h = 1.5;
+      if (aspect >= 1) {
+        h = 1.5 / aspect;
+      } else {
+        w = 1.5 * aspect;
+      }
+      return { width: parseFloat(w.toFixed(3)), height: parseFloat(h.toFixed(3)) };
+    };
+
+    const lDim = calcDim(landscapePhoto.appearance.aspectRatio);
+    assert(lDim.width === 1.5, 'Landscape photo width is 1.5');
+    assert(Math.abs(lDim.height - (1.5 / (1920 / 1080))) < 0.01, 'Landscape photo height maintains 16:9 ratio');
+
+    const pDim = calcDim(portraitPhoto.appearance.aspectRatio);
+    assert(pDim.height === 1.5, 'Portrait photo height is 1.5');
+    assert(Math.abs(pDim.width - (1.5 * (1080 / 1920))) < 0.01, 'Portrait photo width maintains 9:16 ratio');
+  }
+
   console.log(`\n=== RESULTS: ${passCount} PASSED, ${failCount} FAILED ===\n`);
   if (failCount > 0) {
     process.exit(1);

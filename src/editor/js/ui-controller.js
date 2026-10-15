@@ -246,19 +246,27 @@ class UIController {
     titleEl.className = "hotspot-title";
     titleEl.textContent = title;
 
-    // Check if this is a gaze navigation hotspot and add visual badge
+    // Check if this is a gaze navigation hotspot or photo hotspot and add visual badge
     const isGaze = hotspot.action?.type === 'gazeNavigate' || hotspot.type === 'gazeNavigate' || hotspot.type === 'gaze';
+    const isPhoto = hotspot.action?.type === 'photo' || hotspot.type === 'photo';
     if (isGaze) {
       const durationSec = ((hotspot.action?.duration || 3000) / 1000).toFixed(1);
       const badge = document.createElement("span");
       badge.className = "hotspot-badge badge-gaze";
       badge.textContent = `Gaze ${durationSec}s`;
       titleEl.appendChild(badge);
+    } else if (isPhoto) {
+      const badge = document.createElement("span");
+      badge.className = "hotspot-badge badge-photo";
+      badge.textContent = "Foto";
+      titleEl.appendChild(badge);
     }
 
     const target = document.createElement("div");
     target.className = "hotspot-target";
-    if (targetSceneId) {
+    if (isPhoto) {
+      target.textContent = "📷 Foto statica";
+    } else if (targetSceneId) {
       const targetScene = this.editor.sceneManager.getSceneById(
         targetSceneId
       );
@@ -291,7 +299,11 @@ class UIController {
     item.appendChild(actions);
 
     item.onclick = () => {
-      this.editor.selectHotspot(index);
+      if (this.editor.hotspotEditor.currentHotspotIndex === index) {
+        this.editor.selectHotspot(-1);
+      } else {
+        this.editor.selectHotspot(index, false);
+      }
     };
 
     return item;
@@ -399,10 +411,28 @@ class UIController {
       if (posZ) posZ.value = "";
       const actionType = this.getEl("hotspotActionType");
       if (actionType) actionType.value = "navigateTo";
+      const targetGroup = this.getEl("hotspotTargetGroup");
+      if (targetGroup) targetGroup.style.display = "block";
+      const goToBtn = this.getEl("hotspotGoToSceneBtn");
+      if (goToBtn) goToBtn.style.display = "none";
       const gazeDurationGroup = this.getEl("hotspotGazeDurationGroup");
       if (gazeDurationGroup) gazeDurationGroup.style.display = "none";
       const gazeDuration = this.getEl("hotspotGazeDuration");
       if (gazeDuration) gazeDuration.value = "3000";
+      const photoGroup = this.getEl("hotspotPhotoGroup");
+      if (photoGroup) photoGroup.style.display = "none";
+      const photoUrl = this.getEl("hotspotPhotoUrl");
+      if (photoUrl) photoUrl.value = "";
+      const photoPreviewWrap = this.getEl("hotspotPhotoPreviewWrap");
+      if (photoPreviewWrap) photoPreviewWrap.style.display = "none";
+      const iconGroup = this.getEl("hotspotIconGroup");
+      if (iconGroup) iconGroup.style.display = "block";
+      const scaleSlider = this.getEl("hotspotScale");
+      if (scaleSlider) scaleSlider.value = "1.0";
+      const scaleNum = this.getEl("hotspotScaleNum");
+      if (scaleNum) scaleNum.value = "1.0";
+      const scaleVal = this.getEl("hotspotScaleVal");
+      if (scaleVal) scaleVal.textContent = "1.0x";
       return;
     }
 
@@ -447,12 +477,25 @@ class UIController {
     // Update target dropdown
     this.updateTargetSceneOptions();
 
-    // Update Action Type and Gaze Duration controls
+    // Update Action Type, Target, Photo and Gaze Duration controls
     const isGaze = hotspot.action?.type === 'gazeNavigate' || hotspot.type === 'gazeNavigate' || hotspot.type === 'gaze';
+    const isPhoto = hotspot.action?.type === 'photo' || hotspot.type === 'photo';
+
     const actionTypeEl = this.getEl("hotspotActionType");
     if (actionTypeEl) {
-      actionTypeEl.value = isGaze ? "gazeNavigate" : "navigateTo";
+      actionTypeEl.value = isPhoto ? "photo" : (isGaze ? "gazeNavigate" : "navigateTo");
     }
+
+    const targetGroup = this.getEl("hotspotTargetGroup");
+    if (targetGroup) {
+      targetGroup.style.display = isPhoto ? "none" : "block";
+    }
+
+    const goToBtn = this.getEl("hotspotGoToSceneBtn");
+    if (goToBtn) {
+      goToBtn.style.display = (!isPhoto && targetSceneId) ? "inline-block" : "none";
+    }
+
     const gazeDurationGroup = this.getEl("hotspotGazeDurationGroup");
     if (gazeDurationGroup) {
       gazeDurationGroup.style.display = isGaze ? "block" : "none";
@@ -460,6 +503,53 @@ class UIController {
     const gazeDurationEl = this.getEl("hotspotGazeDuration");
     if (gazeDurationEl) {
       gazeDurationEl.value = hotspot.action?.duration || 3000;
+    }
+
+    const photoGroup = this.getEl("hotspotPhotoGroup");
+    if (photoGroup) {
+      photoGroup.style.display = isPhoto ? "block" : "none";
+    }
+    const iconGroup = this.getEl("hotspotIconGroup");
+    if (iconGroup) {
+      iconGroup.style.display = isPhoto ? "none" : "block";
+    }
+
+    // Scale controls
+    const rawScale = hotspot.appearance?.scale;
+    let scaleVal = 1.0;
+    if (typeof rawScale === 'number' && isFinite(rawScale)) {
+      scaleVal = rawScale;
+    } else if (typeof rawScale === 'string') {
+      const firstPart = parseFloat(rawScale.trim().split(/\s+/)[0]);
+      if (isFinite(firstPart) && firstPart > 0) scaleVal = firstPart;
+    }
+    const scaleSlider = this.getEl("hotspotScale");
+    if (scaleSlider) scaleSlider.value = scaleVal;
+    const scaleNum = this.getEl("hotspotScaleNum");
+    if (scaleNum) scaleNum.value = scaleVal;
+    const scaleValText = this.getEl("hotspotScaleVal");
+    if (scaleValText) scaleValText.textContent = scaleVal.toFixed(1) + "x";
+
+    const photoUrlInput = this.getEl("hotspotPhotoUrl");
+    const photoUrl = hotspot.action?.url || hotspot.appearance?.icon || "";
+    if (photoUrlInput) {
+      if (photoUrl.startsWith("data:")) {
+        photoUrlInput.value = "[Foto caricata]";
+        photoUrlInput.setAttribute("title", "Foto caricata dal computer");
+      } else {
+        photoUrlInput.value = photoUrl;
+        photoUrlInput.removeAttribute("title");
+      }
+    }
+    const photoPreviewWrap = this.getEl("hotspotPhotoPreviewWrap");
+    const photoPreview = this.getEl("hotspotPhotoPreview");
+    if (photoPreviewWrap && photoPreview) {
+      if (isPhoto && photoUrl) {
+        photoPreview.src = photoUrl;
+        photoPreviewWrap.style.display = "block";
+      } else {
+        photoPreviewWrap.style.display = "none";
+      }
     }
   }
 

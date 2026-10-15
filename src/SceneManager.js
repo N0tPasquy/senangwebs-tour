@@ -220,8 +220,26 @@ export class SceneManager {
   destroy() {
     this.clearTimers();
     this.removeFadeOverlay();
-    if (this.skyEl && this.skyEl.parentNode) {
-      this.skyEl.setAttribute('src', '');
+    if (this.skyEl) {
+      if (this.skyEl.object3D) {
+        this.skyEl.object3D.traverse((child) => {
+          if (child.material) {
+            if (Array.isArray(child.material)) {
+              child.material.forEach((m) => {
+                if (m.map) m.map.dispose();
+                m.dispose();
+              });
+            } else {
+              if (child.material.map) child.material.map.dispose();
+              child.material.dispose();
+            }
+          }
+          if (child.geometry) child.geometry.dispose();
+        });
+      }
+      if (this.skyEl.parentNode) {
+        this.skyEl.setAttribute('src', '');
+      }
     }
     this.currentSceneId = null;
     this.currentSceneData = null;

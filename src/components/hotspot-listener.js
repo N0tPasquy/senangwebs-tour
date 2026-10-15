@@ -9,23 +9,48 @@ if (typeof AFRAME !== 'undefined') {
 
     init: function () {
       this.onClick = this.onClick.bind(this);
+      this.onMouseDown = this.onMouseDown.bind(this);
       this.onMouseEnter = this.onMouseEnter.bind(this);
       this.onMouseLeave = this.onMouseLeave.bind(this);
+      this.mouseDownPos = null;
     },
 
     play: function () {
+      this.el.addEventListener('mousedown', this.onMouseDown);
       this.el.addEventListener('click', this.onClick);
       this.el.addEventListener('mouseenter', this.onMouseEnter);
       this.el.addEventListener('mouseleave', this.onMouseLeave);
     },
 
     pause: function () {
+      this.el.removeEventListener('mousedown', this.onMouseDown);
       this.el.removeEventListener('click', this.onClick);
       this.el.removeEventListener('mouseenter', this.onMouseEnter);
       this.el.removeEventListener('mouseleave', this.onMouseLeave);
     },
 
+    onMouseDown: function (evt) {
+      const e = evt.detail?.cursorElEvent || evt;
+      if (e && e.clientX !== undefined) {
+        this.mouseDownPos = { x: e.clientX, y: e.clientY };
+      }
+    },
+
     onClick: function (evt) {
+      // Discard clicks that were actually camera drags
+      if (this.mouseDownPos) {
+        const e = evt.detail?.cursorElEvent || evt;
+        if (e && e.clientX !== undefined) {
+          const dx = Math.abs(e.clientX - this.mouseDownPos.x);
+          const dy = Math.abs(e.clientY - this.mouseDownPos.y);
+          this.mouseDownPos = null;
+          if (dx > 8 || dy > 8) {
+            return; // User was dragging the camera, not clicking
+          }
+        }
+        this.mouseDownPos = null;
+      }
+
       const hotspotData = JSON.parse(this.data.hotspotData);
       
       // Emit custom event that the Tour class can listen to

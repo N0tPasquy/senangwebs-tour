@@ -43,8 +43,10 @@ export function buildTourConfig(config, scenes) {
  * @returns {Object} Complete tour config
  */
 export function buildPreviewTourConfig(currentScene, allScenes) {
-  return buildTourConfig(
+  const config = buildTourConfig(
     { initialSceneId: currentScene.id },
     allScenes
   );
+  config.isEditor = true;
+  return config;
 }

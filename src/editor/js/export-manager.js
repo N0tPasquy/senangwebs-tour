@@ -175,7 +175,7 @@ class ExportManager {
   <body>
     <a-scene id="tour-container">
       <a-camera look-controls>
-        <a-cursor fuse="false" cursor="fuse: false; fuseTimeout: 0;"></a-cursor>
+        <a-cursor fuse="false" cursor="fuse: false; fuseTimeout: 0;" raycaster="objects: .clickable;"></a-cursor>
       </a-camera>
     </a-scene>
 

@@ -62,12 +62,61 @@ async function generateThumbnail(file, maxWidth = 200, maxHeight = 150) {
 }
 
 /**
- * Load image file as data URL
+ * Load image file as data URL, with optional downscaling and compression.
+ * @param {File|Blob} file
+ * @param {Object} [options]
+ * @param {number} [options.maxDimension] - Max width/height; if exceeded, image is downscaled proportionally
+ * @param {number} [options.quality=0.85] - Output image quality (for JPEG/WebP)
+ * @param {string} [options.format] - Explicit output format ('image/jpeg', 'image/png', 'image/webp')
+ * @returns {Promise<string>}
  */
-async function loadImageAsDataUrl(file) {
+async function loadImageAsDataUrl(file, options = {}) {
+    const { maxDimension, quality = 0.85, format = null } = options;
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
-        reader.onload = (e) => resolve(e.target.result);
+        reader.onload = (e) => {
+            const rawDataUrl = e.target.result;
+            if (!maxDimension) {
+                return resolve(rawDataUrl);
+            }
+
+            const img = new Image();
+            img.onload = () => {
+                let { width, height } = img;
+                if (width <= maxDimension && height <= maxDimension && !format && file.size < 500 * 1024) {
+                    return resolve(rawDataUrl);
+                }
+
+                if (width > maxDimension || height > maxDimension) {
+                    if (width > height) {
+                        height = Math.round((height * maxDimension) / width);
+                        width = maxDimension;
+                    } else {
+                        width = Math.round((width * maxDimension) / height);
+                        height = maxDimension;
+                    }
+                }
+
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                if (!ctx) {
+                    return resolve(rawDataUrl);
+                }
+                ctx.drawImage(img, 0, 0, width, height);
+
+                const outFormat = format || (file.type === 'image/png' ? 'image/png' : 'image/jpeg');
+                const outQuality = outFormat === 'image/png' ? undefined : quality;
+                try {
+                    resolve(canvas.toDataURL(outFormat, outQuality));
+                } catch (err) {
+                    resolve(rawDataUrl);
+                }
+            };
+            img.onerror = () => resolve(rawDataUrl);
+            img.src = rawDataUrl;
+        };
         reader.onerror = reject;
         reader.readAsDataURL(file);
     });

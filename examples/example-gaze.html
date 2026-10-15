@@ -232,7 +232,7 @@
     <a-scene id="tour-scene">
       <a-camera look-controls>
         <!-- fuse explicitly disabled so standard hotspots require genuine touch/click -->
-        <a-cursor fuse="false" cursor="fuse: false; fuseTimeout: 0;"></a-cursor>
+        <a-cursor fuse="false" cursor="fuse: false; fuseTimeout: 0;" raycaster="objects: .clickable;"></a-cursor>
       </a-camera>
     </a-scene>
 

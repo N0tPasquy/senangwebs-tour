@@ -122,7 +122,7 @@ export class GazeManager {
     const el = detail.el;
     const hotspotData = detail.hotspotData;
 
-    if (!el || this.isNavigating || !this.tour || this.tour.isDestroyed) {
+    if (!el || this.isNavigating || !this.tour || this.tour.isDestroyed || this.tour.config?.isEditor) {
       return;
     }
 

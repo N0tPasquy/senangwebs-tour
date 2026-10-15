@@ -31,7 +31,7 @@ class SceneManagerEditor {
       if (fileOrConfig instanceof File || fileOrConfig instanceof Blob) {
         // Original behavior: handle File upload
         const thumbnail = await generateThumbnail(fileOrConfig);
-        const imageDataUrl = await loadImageAsDataUrl(fileOrConfig);
+        const imageDataUrl = await loadImageAsDataUrl(fileOrConfig, { maxDimension: 8192, quality: 0.90 });
 
         scene = {
           id: this.ensureUniqueSceneId(

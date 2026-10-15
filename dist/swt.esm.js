@@ -13,23 +13,48 @@ if (typeof AFRAME !== 'undefined') {
 
     init: function () {
       this.onClick = this.onClick.bind(this);
+      this.onMouseDown = this.onMouseDown.bind(this);
       this.onMouseEnter = this.onMouseEnter.bind(this);
       this.onMouseLeave = this.onMouseLeave.bind(this);
+      this.mouseDownPos = null;
     },
 
     play: function () {
+      this.el.addEventListener('mousedown', this.onMouseDown);
       this.el.addEventListener('click', this.onClick);
       this.el.addEventListener('mouseenter', this.onMouseEnter);
       this.el.addEventListener('mouseleave', this.onMouseLeave);
     },
 
     pause: function () {
+      this.el.removeEventListener('mousedown', this.onMouseDown);
       this.el.removeEventListener('click', this.onClick);
       this.el.removeEventListener('mouseenter', this.onMouseEnter);
       this.el.removeEventListener('mouseleave', this.onMouseLeave);
     },
 
+    onMouseDown: function (evt) {
+      const e = evt.detail?.cursorElEvent || evt;
+      if (e && e.clientX !== undefined) {
+        this.mouseDownPos = { x: e.clientX, y: e.clientY };
+      }
+    },
+
     onClick: function (evt) {
+      // Discard clicks that were actually camera drags
+      if (this.mouseDownPos) {
+        const e = evt.detail?.cursorElEvent || evt;
+        if (e && e.clientX !== undefined) {
+          const dx = Math.abs(e.clientX - this.mouseDownPos.x);
+          const dy = Math.abs(e.clientY - this.mouseDownPos.y);
+          this.mouseDownPos = null;
+          if (dx > 8 || dy > 8) {
+            return; // User was dragging the camera, not clicking
+          }
+        }
+        this.mouseDownPos = null;
+      }
+
       const hotspotData = JSON.parse(this.data.hotspotData);
       
       // Emit custom event that the Tour class can listen to
@@ -505,31 +530,35 @@ class AssetManager {
     return new Promise((resolve, reject) => {
       const imgEl = document.createElement('img');
       imgEl.setAttribute('id', id);
-      imgEl.setAttribute('crossorigin', 'anonymous');
       
-      // Add cache-busting parameter to force fresh fetch with CORS headers
-      // This prevents browser from using cached non-CORS responses
-      // Only apply to plain http(s) URLs without a query string: data: and
-      // blob: URLs don't support query parameters, and URLs that already have
-      // a query string may be signed/served URLs whose signature must be
-      // preserved exactly.
+      const isDataOrBlob = url.startsWith('data:') || url.startsWith('blob:');
+      if (!isDataOrBlob) {
+        imgEl.setAttribute('crossorigin', 'anonymous');
+      }
+      
       let finalUrl = url;
-      if (/^https?:/i.test(url) && !url.includes('?')) {
+      if (!isDataOrBlob && /^https?:/i.test(url) && !url.includes('?')) {
         finalUrl = `${url}?_cors=1`;
       }
-      imgEl.setAttribute('src', finalUrl);
 
       imgEl.addEventListener('load', () => {
         this.loadedAssets.set(id, imgEl);
         resolve(imgEl);
-      });
+      }, { once: true });
 
       imgEl.addEventListener('error', (err) => {
-        console.error(`Failed to load asset: ${url}`, err);
+        console.error(`Failed to load asset: ${url.slice(0, 100)}`, err);
         reject(err);
-      });
+      }, { once: true });
 
+      imgEl.setAttribute('src', finalUrl);
       this.assetsEl.appendChild(imgEl);
+
+      // Handle synchronous or already cached completion
+      if (imgEl.complete && (imgEl.naturalWidth > 0 || isDataOrBlob)) {
+        this.loadedAssets.set(id, imgEl);
+        resolve(imgEl);
+      }
     });
   }
 
@@ -844,8 +873,26 @@ class SceneManager {
   destroy() {
     this.clearTimers();
     this.removeFadeOverlay();
-    if (this.skyEl && this.skyEl.parentNode) {
-      this.skyEl.setAttribute('src', '');
+    if (this.skyEl) {
+      if (this.skyEl.object3D) {
+        this.skyEl.object3D.traverse((child) => {
+          if (child.material) {
+            if (Array.isArray(child.material)) {
+              child.material.forEach((m) => {
+                if (m.map) m.map.dispose();
+                m.dispose();
+              });
+            } else {
+              if (child.material.map) child.material.map.dispose();
+              child.material.dispose();
+            }
+          }
+          if (child.geometry) child.geometry.dispose();
+        });
+      }
+      if (this.skyEl.parentNode) {
+        this.skyEl.setAttribute('src', '');
+      }
     }
     this.currentSceneId = null;
     this.currentSceneData = null;
@@ -976,7 +1023,7 @@ class GazeManager {
     const el = detail.el;
     const hotspotData = detail.hotspotData;
 
-    if (!el || this.isNavigating || !this.tour || this.tour.isDestroyed) {
+    if (!el || this.isNavigating || !this.tour || this.tour.isDestroyed || this.tour.config?.isEditor) {
       return;
     }
 
@@ -1284,8 +1331,30 @@ class HotspotManager {
       const textEl = this.tooltipEl.querySelector('a-text');
       textEl.setAttribute('value', text);
       
-      // Position tooltip above the hotspot
-      const offsetY = 1.5;
+      // Parse scale factor (default 1)
+      const rawScale = hotspotData.appearance?.scale;
+      let scaleFactor = 1;
+      if (typeof rawScale === 'number' && isFinite(rawScale)) {
+        scaleFactor = rawScale;
+      } else if (typeof rawScale === 'string') {
+        const firstPart = parseFloat(rawScale.trim().split(/\s+/)[0]);
+        if (isFinite(firstPart) && firstPart > 0) scaleFactor = firstPart;
+      }
+
+      // Scale the tooltip proportionally (bounded between 0.6x and 3.0x for legibility)
+      const tooltipScale = Math.min(Math.max(scaleFactor * 0.9, 0.6), 3.0);
+      this.tooltipEl.setAttribute('scale', `${tooltipScale} ${tooltipScale} ${tooltipScale}`);
+
+      // Calculate half-height of the hotspot for exact positioning
+      const isPhoto = hotspotData.action?.type === 'photo' || hotspotData.type === 'photo';
+      let elementHalfHeight = 0.5;
+      if (isPhoto) {
+        const aspect = hotspotData.appearance?.aspectRatio || 1;
+        elementHalfHeight = aspect >= 1 ? (1.5 / aspect) * 0.5 : 1.5 * 0.5;
+      }
+
+      // Position tooltip nicely above the top edge of the scaled hotspot
+      const offsetY = (elementHalfHeight * scaleFactor) + (tooltipScale * 0.45);
       this.tooltipEl.setAttribute('position', `${position.x} ${position.y + offsetY} ${position.z}`);
       this.tooltipEl.setAttribute('visible', 'true');
       
@@ -1323,7 +1392,8 @@ class HotspotManager {
     // (IconRenderer uses a shared renderContainer that would be corrupted by parallel generation)
     for (let index = 0; index < hotspots.length; index++) {
       const hotspot = hotspots[index];
-      const icon = hotspot.appearance?.icon || this.defaultSettings.icon;
+      const isPhoto = hotspot.action?.type === 'photo' || hotspot.type === 'photo';
+      const icon = hotspot.appearance?.icon || (isPhoto ? hotspot.action?.url : null) || this.defaultSettings.icon;
       const color = hotspot.appearance?.color || '#ffffff';
       
       if (!icon) continue;
@@ -1337,7 +1407,17 @@ class HotspotManager {
       if (isImageUrl) {
         // Preload as image asset
         try {
-          await this.assetManager.preloadImage(icon, assetId);
+          const imgAsset = await this.assetManager.preloadImage(icon, assetId);
+          if (isPhoto && imgAsset) {
+            const nw = imgAsset.naturalWidth || imgAsset.width;
+            const nh = imgAsset.naturalHeight || imgAsset.height;
+            if (nw && nh && nh > 0) {
+              hotspot.appearance = hotspot.appearance || {};
+              if (!hotspot.appearance.aspectRatio) {
+                hotspot.appearance.aspectRatio = nw / nh;
+              }
+            }
+          }
         } catch (err) {
           console.warn(`Failed to load icon for hotspot ${index}, will use color instead`);
         }
@@ -1369,10 +1449,13 @@ class HotspotManager {
    */
   createHotspot(hotspot, index) {
     const isGaze = isGazeHotspot(hotspot);
+    const isPhoto = hotspot.action?.type === 'photo' || hotspot.type === 'photo';
     const hotspotEl = document.createElement('a-entity');
     hotspotEl.classList.add('swt-hotspot');
     if (isGaze) {
       hotspotEl.classList.add('swt-gaze-hotspot');
+    } else if (isPhoto) {
+      hotspotEl.classList.add('swt-photo-hotspot');
     }
     
     // Set position
@@ -1380,8 +1463,8 @@ class HotspotManager {
     hotspotEl.setAttribute('position', `${pos.x} ${pos.y} ${pos.z}`);
 
     // Get icon and color
-    const icon = hotspot.appearance?.icon || this.defaultSettings.icon;
-    const color = hotspot.appearance?.color || '#4CC3D9';
+    const icon = hotspot.appearance?.icon || (isPhoto ? hotspot.action?.url : null) || this.defaultSettings.icon;
+    const color = hotspot.appearance?.color || (isPhoto ? '#ffffff' : '#4CC3D9');
     
     // Check if we have a preloaded icon asset (either from URL or generated from icon name)
     // Use the unique asset prefix that includes scene load counter
@@ -1392,11 +1475,62 @@ class HotspotManager {
     let visualEl;
     
     // Check if icon asset was successfully loaded/generated
-    if (icon && assetEl) {
+    if (icon) {
       visualEl = document.createElement('a-image');
-      visualEl.setAttribute('src', `#${assetId}`);
-      // Make images double-sided
-      visualEl.setAttribute('material', 'side: double; transparent: true; alphaTest: 0.1');
+      visualEl.setAttribute('src', assetEl ? `#${assetId}` : icon);
+      // Billboards always face the camera; side: front and flat shader optimize GPU fill rate and prevent lag
+      visualEl.setAttribute('material', 'side: front; transparent: true; alphaTest: 0.05; shader: flat');
+
+      if (isPhoto) {
+        // Compute proper width and height respecting original aspect ratio
+        let aspect = hotspot.appearance?.aspectRatio;
+        if (!aspect && assetEl) {
+          const nw = assetEl.naturalWidth || assetEl.width;
+          const nh = assetEl.naturalHeight || assetEl.height;
+          if (nw && nh && nh > 0) {
+            aspect = nw / nh;
+            hotspot.appearance = hotspot.appearance || {};
+            hotspot.appearance.aspectRatio = aspect;
+          }
+        }
+        aspect = aspect || 1;
+
+        let w = 1.5;
+        let h = 1.5;
+        if (aspect >= 1) {
+          h = 1.5 / aspect;
+        } else {
+          w = 1.5 * aspect;
+        }
+        visualEl.setAttribute('width', w.toFixed(3));
+        visualEl.setAttribute('height', h.toFixed(3));
+
+        // Fallback: when texture loads asynchronously, re-apply natural aspect ratio if needed
+        visualEl.addEventListener('materialtextureloaded', () => {
+          const texture = visualEl.getObject3D('mesh')?.material?.map;
+          if (texture && texture.image) {
+            const nw = texture.image.naturalWidth || texture.image.width;
+            const nh = texture.image.naturalHeight || texture.image.height;
+            if (nw && nh && nh > 0) {
+              const loadedAspect = nw / nh;
+              let tw = 1.5;
+              let th = 1.5;
+              if (loadedAspect >= 1) {
+                th = 1.5 / loadedAspect;
+              } else {
+                tw = 1.5 * loadedAspect;
+              }
+              visualEl.setAttribute('width', tw.toFixed(3));
+              visualEl.setAttribute('height', th.toFixed(3));
+              hotspot.appearance = hotspot.appearance || {};
+              hotspot.appearance.aspectRatio = loadedAspect;
+            }
+          }
+        });
+      } else {
+        visualEl.setAttribute('width', '1');
+        visualEl.setAttribute('height', '1');
+      }
     } else {
       // Fallback to a colored plane
       visualEl = document.createElement('a-plane');
@@ -1427,6 +1561,7 @@ class HotspotManager {
       gazeRing.setAttribute('id', `swt-gaze-ring-${index}`);
       gazeRing.setAttribute('radius-inner', '0.62');
       gazeRing.setAttribute('radius-outer', '0.72');
+      gazeRing.setAttribute('scale', this.normalizeScale(hotspot.appearance?.scale ?? this.defaultSettings.scale));
       gazeRing.setAttribute('material', `color: ${color}; side: double; transparent: true; opacity: 0.85; shader: flat`);
       gazeRing.setAttribute('swt-billboard', 'enabled: true');
       hotspotEl.appendChild(gazeRing);
@@ -1473,6 +1608,22 @@ class HotspotManager {
     this.removeHotspotIconAssets();
     
     this.activeHotspots.forEach(hotspot => {
+      if (hotspot.object3D) {
+        hotspot.object3D.traverse((child) => {
+          if (child.geometry) child.geometry.dispose();
+          if (child.material) {
+            if (Array.isArray(child.material)) {
+              child.material.forEach((m) => {
+                if (m.map) m.map.dispose();
+                m.dispose();
+              });
+            } else {
+              if (child.material.map) child.material.map.dispose();
+              child.material.dispose();
+            }
+          }
+        });
+      }
       if (hotspot.parentNode) {
         hotspot.parentNode.removeChild(hotspot);
       }
@@ -1860,6 +2011,7 @@ class Tour {
       // Strictly enforce fuse: false so A-Frame does NOT trigger auto-fuse clicks on mobile (iOS/Android default)
       cursor.setAttribute("fuse", "false");
       cursor.setAttribute("cursor", "fuse: false; fuseTimeout: 0;");
+      cursor.setAttribute("raycaster", "objects: .clickable;");
 
       const disableFuse = () => {
         if (cursor.components && cursor.components.cursor) {
@@ -2052,6 +2204,11 @@ class Tour {
       sceneId: currentSceneId,
     });
 
+    // In editor mode, navigation actions are disabled (use "Vai" in sidebar)
+    if (this.config.isEditor) {
+      return;
+    }
+
     // Handle the action
     if (hotspotData.action) {
       this.handleAction(hotspotData.action);
@@ -2076,9 +2233,223 @@ class Tour {
         // Handled exclusively by GazeManager on gaze countdown completion
         break;
 
+      case "photo":
+      case "image":
+        this.openPhotoModal(action);
+        break;
+
       default:
         console.warn(`Unknown action type: ${action.type}`);
     }
+  }
+
+  /**
+   * Open modal view displaying a static photo in large format with description
+   * White background card for optimal readability
+   * @param {Object} actionData - Action object containing url, title, description
+   */
+  openPhotoModal(actionData) {
+    if (!actionData) return;
+    this.closePhotoModal();
+
+    const imageUrl = actionData.url || actionData.imageUrl || "";
+    const title = actionData.title || "";
+    const description = actionData.description || "";
+
+    const escapeText = (str) =>
+      str ? String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;") : "";
+
+    this.ensurePhotoModalStyles();
+
+    const modal = document.createElement("div");
+    modal.id = "swt-photo-modal";
+    modal.className = "swt-photo-modal-overlay";
+    modal.setAttribute("role", "dialog");
+    modal.setAttribute("aria-modal", "true");
+
+    modal.innerHTML = `
+      <div class="swt-photo-modal-card">
+        <button type="button" class="swt-photo-modal-close" aria-label="Chiudi">✕</button>
+        <div class="swt-photo-modal-content">
+          ${imageUrl ? `
+            <div class="swt-photo-modal-img-wrap">
+              <img class="swt-photo-modal-img" src="${imageUrl}" alt="${escapeText(title) || 'Foto'}" />
+            </div>
+          ` : ""}
+          ${(title || description) ? `
+            <div class="swt-photo-modal-info">
+              ${title ? `<h3 class="swt-photo-modal-title">${escapeText(title)}</h3>` : ""}
+              ${description ? `<p class="swt-photo-modal-desc">${escapeText(description)}</p>` : ""}
+            </div>
+          ` : ""}
+        </div>
+      </div>
+    `;
+
+    const closeBtn = modal.querySelector(".swt-photo-modal-close");
+    closeBtn?.addEventListener("click", () => this.closePhotoModal());
+
+    modal.addEventListener("click", (e) => {
+      if (e.target === modal) {
+        this.closePhotoModal();
+      }
+    });
+
+    this._onModalKeyDown = (e) => {
+      if (e.key === "Escape") {
+        this.closePhotoModal();
+      }
+    };
+    window.addEventListener("keydown", this._onModalKeyDown);
+
+    document.body.appendChild(modal);
+    this.photoModalEl = modal;
+  }
+
+  /**
+   * Close the active photo modal view
+   */
+  closePhotoModal() {
+    if (this._onModalKeyDown) {
+      window.removeEventListener("keydown", this._onModalKeyDown);
+      this._onModalKeyDown = null;
+    }
+    if (this.photoModalEl && this.photoModalEl.parentNode) {
+      this.photoModalEl.parentNode.removeChild(this.photoModalEl);
+    }
+    const existing = document.getElementById("swt-photo-modal");
+    if (existing && existing.parentNode) {
+      existing.parentNode.removeChild(existing);
+    }
+    this.photoModalEl = null;
+  }
+
+  /**
+   * Ensure responsive CSS styles for photo modal view exist in DOM
+   */
+  ensurePhotoModalStyles() {
+    if (typeof document === "undefined" || document.getElementById("swt-photo-modal-styles")) return;
+    const style = document.createElement("style");
+    style.id = "swt-photo-modal-styles";
+    style.textContent = `
+      .swt-photo-modal-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 999999;
+        background: rgba(15, 23, 42, 0.78);
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 16px;
+        box-sizing: border-box;
+        animation: swtModalFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      }
+      @keyframes swtModalFadeIn {
+        from { opacity: 0; transform: scale(0.97); }
+        to { opacity: 1; transform: scale(1); }
+      }
+      .swt-photo-modal-card {
+        position: relative;
+        background: #ffffff !important;
+        color: #0f172a !important;
+        border-radius: 16px;
+        box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(0, 0, 0, 0.05);
+        max-width: 860px;
+        width: 100%;
+        max-height: 88vh;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        box-sizing: border-box;
+      }
+      .swt-photo-modal-close {
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        z-index: 10;
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        background: rgba(0, 0, 0, 0.08);
+        border: none;
+        color: #0f172a;
+        font-size: 16px;
+        font-weight: 700;
+        line-height: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: background 0.15s, transform 0.15s;
+      }
+      .swt-photo-modal-close:hover {
+        background: rgba(0, 0, 0, 0.15);
+        transform: scale(1.06);
+      }
+      .swt-photo-modal-content {
+        display: flex;
+        flex-direction: column;
+        max-height: 88vh;
+        overflow-y: auto;
+        padding: 20px;
+        box-sizing: border-box;
+      }
+      .swt-photo-modal-img-wrap {
+        width: 100%;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        background: #f8fafc;
+        border-radius: 10px;
+        overflow: hidden;
+        margin-bottom: 14px;
+        min-height: 120px;
+      }
+      .swt-photo-modal-img {
+        max-width: 100%;
+        max-height: 60vh;
+        object-fit: contain;
+        display: block;
+      }
+      .swt-photo-modal-info {
+        padding: 4px 6px 12px 6px;
+      }
+      .swt-photo-modal-title {
+        margin: 0 0 8px 0;
+        font-size: 18px;
+        font-weight: 700;
+        color: #0f172a !important;
+        line-height: 1.35;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      }
+      .swt-photo-modal-desc {
+        margin: 0;
+        font-size: 14px;
+        line-height: 1.6;
+        color: #334155 !important;
+        white-space: pre-wrap;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      }
+      @media (max-width: 600px) {
+        .swt-photo-modal-overlay {
+          padding: 10px;
+        }
+        .swt-photo-modal-card {
+          border-radius: 12px;
+          max-height: 92vh;
+        }
+        .swt-photo-modal-content {
+          padding: 14px;
+          max-height: 92vh;
+        }
+        .swt-photo-modal-img {
+          max-height: 50vh;
+        }
+      }
+    `;
+    document.head.appendChild(style);
   }
 
   /**
@@ -2195,6 +2566,9 @@ class Tour {
       this.mouseCursorEl.parentNode.removeChild(this.mouseCursorEl);
       this.mouseCursorEl = null;
     }
+
+    // Clean up photo modal if open
+    this.closePhotoModal();
 
     this.isStarted = false;
   }

@@ -1,5 +1,5 @@
 // Main Editor Controller
-import { debounce, showModal, showToast } from './utils.js';
+import { debounce, showModal, showToast, loadImageAsDataUrl } from './utils.js';
 import EventEmitter, { EditorEvents } from './event-emitter.js';
 
 class TourEditor {
@@ -212,6 +212,14 @@ class TourEditor {
             });
         });
 
+        document.getElementById('hotspotTitle')?.addEventListener('input', (e) => {
+            const tooltipEl = this.previewController.tour?.hotspotManager?.tooltipEl;
+            if (tooltipEl && tooltipEl.getAttribute('visible') === 'true') {
+                const textEl = tooltipEl.querySelector('a-text');
+                if (textEl) textEl.setAttribute('value', e.target.value);
+            }
+        });
+
         document.getElementById('hotspotTitle')?.addEventListener('input', debounce((e) => {
             this.updateCurrentHotspot('tooltip.text', e.target.value);
         }, 300));
@@ -221,27 +229,176 @@ class TourEditor {
         }, 300));
         
         document.getElementById('hotspotTarget')?.addEventListener('change', (e) => {
-            this.updateCurrentHotspot('action.target', e.target.value);
+            const targetVal = e.target.value;
+            this.updateCurrentHotspot('action.target', targetVal);
+            const goToBtn = document.getElementById('hotspotGoToSceneBtn');
+            if (goToBtn) {
+                goToBtn.style.display = targetVal ? 'inline-block' : 'none';
+            }
         });
 
-        document.getElementById('hotspotActionType')?.addEventListener('change', (e) => {
-            const actionType = e.target.value;
-            this.updateCurrentHotspot('action.type', actionType);
-            const gazeGroup = document.getElementById('hotspotGazeDurationGroup');
-            if (gazeGroup) {
-                gazeGroup.style.display = actionType === 'gazeNavigate' ? 'block' : 'none';
+        document.getElementById('hotspotGoToSceneBtn')?.addEventListener('click', () => {
+            const targetSelect = document.getElementById('hotspotTarget');
+            const targetSceneId = targetSelect?.value;
+            if (targetSceneId) {
+                const targetIndex = this.sceneManager.scenes.findIndex(s => s.id === targetSceneId);
+                if (targetIndex >= 0) {
+                    this.selectScene(targetIndex);
+                    showToast('Passato alla scena: ' + (this.sceneManager.scenes[targetIndex].name || targetSceneId), 'info');
+                }
             }
+        });
+
+        document.getElementById('hotspotActionType')?.addEventListener('change', async (e) => {
+            const actionType = e.target.value;
+            
+            const targetGroup = document.getElementById('hotspotTargetGroup');
+            const goToBtn = document.getElementById('hotspotGoToSceneBtn');
+            const gazeGroup = document.getElementById('hotspotGazeDurationGroup');
+            const photoGroup = document.getElementById('hotspotPhotoGroup');
+            const iconGroup = document.getElementById('hotspotIconGroup');
+            
+            if (targetGroup) targetGroup.style.display = actionType === 'photo' ? 'none' : 'block';
+            if (goToBtn) {
+                const targetVal = document.getElementById('hotspotTarget')?.value;
+                goToBtn.style.display = (actionType !== 'photo' && targetVal) ? 'inline-block' : 'none';
+            }
+            if (gazeGroup) gazeGroup.style.display = actionType === 'gazeNavigate' ? 'block' : 'none';
+            if (photoGroup) photoGroup.style.display = actionType === 'photo' ? 'block' : 'none';
+            if (iconGroup) iconGroup.style.display = actionType === 'photo' ? 'none' : 'block';
+
+            await this.updateCurrentHotspot('action.type', actionType);
+
             if (actionType === 'gazeNavigate') {
                 const durInput = document.getElementById('hotspotGazeDuration');
                 const dur = durInput ? parseInt(durInput.value, 10) || 3000 : 3000;
-                this.updateCurrentHotspot('action.duration', dur);
+                await this.updateCurrentHotspot('action.duration', dur);
+            } else if (actionType === 'photo') {
+                const cur = this.hotspotEditor.getCurrentHotspot();
+                if (cur && cur.action?.url) {
+                    await this.updateCurrentHotspot('appearance.icon', cur.action.url);
+                }
             }
+            await this.previewController.refreshHotspots();
         });
 
         document.getElementById('hotspotGazeDuration')?.addEventListener('input', debounce((e) => {
             const dur = Math.max(100, parseInt(e.target.value, 10) || 3000);
             this.updateCurrentHotspot('action.duration', dur);
         }, 300));
+
+        // Photo hotspot file upload and URL
+        document.getElementById('hotspotUploadPhotoBtn')?.addEventListener('click', () => {
+            document.getElementById('hotspotPhotoFile')?.click();
+        });
+
+        document.getElementById('hotspotPhotoFile')?.addEventListener('change', async (e) => {
+            const file = e.target.files?.[0];
+            if (file) {
+                try {
+                    showToast('Elaborazione foto...', 'info', 1000);
+                    // Optimize image: max 1920 for high-res modal view, max 512 for 3D sphere plane
+                    const fullDataUrl = await loadImageAsDataUrl(file, { maxDimension: 1920, quality: 0.85 });
+                    const thumbDataUrl = await loadImageAsDataUrl(file, { maxDimension: 512, quality: 0.80 });
+
+                    // Compute aspect ratio from loaded image
+                    const img = new Image();
+                    await new Promise((resolve) => {
+                        img.onload = resolve;
+                        img.onerror = resolve;
+                        img.src = fullDataUrl;
+                    });
+                    const aspect = (img.naturalWidth && img.naturalHeight) ? (img.naturalWidth / img.naturalHeight) : 1;
+
+                    const curIndex = this.hotspotEditor.currentHotspotIndex;
+                    const curHotspot = this.hotspotEditor.getHotspot(curIndex);
+                    if (curHotspot) {
+                        if (!curHotspot.action) curHotspot.action = {};
+                        if (!curHotspot.appearance) curHotspot.appearance = {};
+                        curHotspot.action.url = fullDataUrl;
+                        curHotspot.appearance.icon = thumbDataUrl;
+                        curHotspot.appearance.aspectRatio = aspect;
+
+                        const photoUrlInput = document.getElementById('hotspotPhotoUrl');
+                        if (photoUrlInput) {
+                            photoUrlInput.value = `[Foto: ${file.name}]`;
+                            photoUrlInput.setAttribute('title', file.name);
+                        }
+
+                        const previewWrap = document.getElementById('hotspotPhotoPreviewWrap');
+                        const previewImg = document.getElementById('hotspotPhotoPreview');
+                        if (previewWrap && previewImg) {
+                            previewImg.src = thumbDataUrl;
+                            previewWrap.style.display = 'block';
+                        }
+
+                        await this.previewController.refreshHotspots();
+                        this.uiController.renderHotspotList();
+                        this.markUnsavedChanges();
+                        showToast('Foto caricata e ottimizzata con successo', 'success');
+                    }
+                } catch (err) {
+                    console.error('Errore nel caricamento foto:', err);
+                    showToast('Errore nel caricamento della foto', 'error');
+                }
+            }
+        });
+
+        document.getElementById('hotspotPhotoUrl')?.addEventListener('input', debounce(async (e) => {
+            const url = e.target.value.trim();
+            if (url.startsWith('[Foto:') || url.startsWith('[Foto caricata')) return;
+            const curIndex = this.hotspotEditor.currentHotspotIndex;
+            const curHotspot = this.hotspotEditor.getHotspot(curIndex);
+            if (curHotspot) {
+                if (!curHotspot.action) curHotspot.action = {};
+                if (!curHotspot.appearance) curHotspot.appearance = {};
+                curHotspot.action.url = url;
+                curHotspot.appearance.icon = url;
+
+                if (url) {
+                    try {
+                        const img = new Image();
+                        await new Promise((resolve) => {
+                            img.onload = resolve;
+                            img.onerror = resolve;
+                            img.src = url;
+                        });
+                        if (img.naturalWidth && img.naturalHeight) {
+                            curHotspot.appearance.aspectRatio = img.naturalWidth / img.naturalHeight;
+                        }
+                    } catch (err) {}
+                }
+
+                const previewWrap = document.getElementById('hotspotPhotoPreviewWrap');
+                const previewImg = document.getElementById('hotspotPhotoPreview');
+                if (previewWrap && previewImg) {
+                    if (url) {
+                        previewImg.src = url;
+                        previewWrap.style.display = 'block';
+                    } else {
+                        previewWrap.style.display = 'none';
+                    }
+                }
+
+                await this.previewController.refreshHotspots();
+                this.uiController.renderHotspotList();
+                this.markUnsavedChanges();
+            }
+        }, 300));
+
+        document.getElementById('hotspotPreviewPhotoBtn')?.addEventListener('click', () => {
+            const cur = this.hotspotEditor.getCurrentHotspot();
+            if (cur && (cur.action?.url || cur.appearance?.icon)) {
+                const actionData = {
+                    url: cur.action?.url || cur.appearance?.icon,
+                    title: cur.tooltip?.text || cur.action?.title || '',
+                    description: cur.tooltip?.description || cur.action?.description || ''
+                };
+                this.previewController.tour?.openPhotoModal(actionData);
+            } else {
+                showToast('Carica o inserisci prima una foto', 'warning');
+            }
+        });
         
         document.getElementById('hotspotColor')?.addEventListener('input', (e) => {
             this.updateCurrentHotspot('appearance.color', e.target.value);
@@ -259,6 +416,92 @@ class TourEditor {
                 this.updateCurrentHotspot('appearance.icon', iconValue);
             }
         });
+
+        document.getElementById('pointCameraToHotspotBtn')?.addEventListener('click', () => {
+            const cur = this.hotspotEditor.getCurrentHotspot();
+            if (cur) {
+                this.previewController.pointCameraToHotspot(cur);
+            }
+        });
+
+        document.getElementById('closeHotspotPropertiesBtn')?.addEventListener('click', () => {
+            this.selectHotspot(-1);
+        });
+
+        const handleScaleUpdate = (val) => {
+            const num = Math.max(0.1, parseFloat(val) || 1.0);
+            const slider = document.getElementById('hotspotScale');
+            const numInput = document.getElementById('hotspotScaleNum');
+            const valText = document.getElementById('hotspotScaleVal');
+            if (slider && parseFloat(slider.value) !== num) slider.value = num;
+            if (numInput && parseFloat(numInput.value) !== num) numInput.value = num;
+            if (valText) valText.textContent = num.toFixed(1) + 'x';
+
+            // Real-time visual feedback on 3D element in preview
+            const curIndex = this.hotspotEditor.currentHotspotIndex;
+            const curHotspot = this.hotspotEditor.getCurrentHotspot();
+            if (curHotspot) {
+                if (!curHotspot.appearance) curHotspot.appearance = {};
+                curHotspot.appearance.scale = num;
+            }
+
+            const activeHotspotEl = this.previewController.tour?.hotspotManager?.activeHotspots?.[curIndex];
+            if (activeHotspotEl) {
+                const visualEl = activeHotspotEl.querySelector('.clickable') || activeHotspotEl.querySelector('a-image, a-plane');
+                if (visualEl) {
+                    visualEl.setAttribute('scale', `${num} ${num} ${num}`);
+                    if (curHotspot) {
+                        if (visualEl.hasAttribute('swt-gaze-hotspot')) {
+                            visualEl.setAttribute('swt-gaze-hotspot', {
+                                hotspotData: JSON.stringify(curHotspot)
+                            });
+                        }
+                        if (visualEl.hasAttribute('swt-hotspot-listener')) {
+                            visualEl.setAttribute('swt-hotspot-listener', {
+                                hotspotData: JSON.stringify(curHotspot)
+                            });
+                        }
+                    }
+                }
+                const ringEl = activeHotspotEl.querySelector('a-ring');
+                if (ringEl) {
+                    ringEl.setAttribute('scale', `${num} ${num} ${num}`);
+                }
+            }
+
+            // Real-time update of tooltip title position and scale
+            const tooltipEl = this.previewController.tour?.hotspotManager?.tooltipEl;
+            if (tooltipEl && tooltipEl.getAttribute('visible') === 'true') {
+                if (curHotspot && curHotspot.position) {
+                    const tooltipScale = Math.min(Math.max(num * 0.9, 0.6), 3.0);
+                    tooltipEl.setAttribute('scale', `${tooltipScale} ${tooltipScale} ${tooltipScale}`);
+
+                    let elementHalfHeight = 0.5;
+                    const isPhoto = curHotspot.action?.type === 'photo' || curHotspot.type === 'photo';
+                    if (isPhoto) {
+                        const aspect = curHotspot.appearance?.aspectRatio || 1;
+                        elementHalfHeight = aspect >= 1 ? (1.5 / aspect) * 0.5 : 1.5 * 0.5;
+                    }
+                    const offsetY = (elementHalfHeight * num) + (tooltipScale * 0.45);
+                    tooltipEl.setAttribute('position', `${curHotspot.position.x} ${curHotspot.position.y + offsetY} ${curHotspot.position.z}`);
+                }
+            }
+        };
+
+        document.getElementById('hotspotScale')?.addEventListener('input', (e) => {
+            handleScaleUpdate(e.target.value);
+        });
+
+        document.getElementById('hotspotScale')?.addEventListener('change', debounce(async (e) => {
+            const num = Math.max(0.1, parseFloat(e.target.value) || 1.0);
+            await this.updateCurrentHotspot('appearance.scale', `${num} ${num} ${num}`);
+        }, 200));
+
+        document.getElementById('hotspotScaleNum')?.addEventListener('input', debounce(async (e) => {
+            const num = Math.max(0.1, parseFloat(e.target.value) || 1.0);
+            handleScaleUpdate(num);
+            await this.updateCurrentHotspot('appearance.scale', `${num} ${num} ${num}`);
+        }, 300));
 
         document.getElementById('hotspotPosX')?.addEventListener('input', debounce((e) => {
             this.updateCurrentHotspotPosition('x', parseFloat(e.target.value) || 0);
@@ -400,7 +643,7 @@ class TourEditor {
     /**
      * Add hotspot at position
      */
-    addHotspotAtPosition(position) {
+    async addHotspotAtPosition(position) {
         const distance = Math.sqrt(position.x * position.x + position.y * position.y + position.z * position.z);
         if (distance > 5) {
             const scale = 5 / distance;
@@ -421,8 +664,9 @@ class TourEditor {
         
         const hotspot = this.hotspotEditor.addHotspot(position, '', cameraOrientation);
         if (hotspot) {
-            this.lastRenderedSceneIndex = -1;
-            this.render();
+            await this.previewController.refreshHotspots();
+            this.uiController.renderHotspotList();
+            this.selectHotspot(this.hotspotEditor.currentHotspotIndex, false);
             this.markUnsavedChanges();
             this.emit(EditorEvents.HOTSPOT_ADD, { 
                 hotspot, 
@@ -481,8 +725,18 @@ class TourEditor {
 
     /**
      * Select hotspot by index
+     * @param {number} index - Hotspot index, or -1 to deselect
+     * @param {boolean} [pointCamera=false] - Whether to animate camera to hotspot
      */
-    selectHotspot(index) {
+    selectHotspot(index, pointCamera = false) {
+        if (index === -1) {
+            this.hotspotEditor.currentHotspotIndex = -1;
+            this.uiController.renderHotspotList();
+            this.uiController.updateHotspotProperties(null);
+            this.previewController.cancelCameraAnimation();
+            return;
+        }
+
         if (this.hotspotEditor.setCurrentHotspot(index)) {
             const hotspot = this.hotspotEditor.getHotspot(index);
             
@@ -491,7 +745,7 @@ class TourEditor {
             this.uiController.updateTargetSceneOptions();
             this.uiController.switchTab('hotspot');
             
-            if (hotspot) {
+            if (hotspot && pointCamera) {
                 this.previewController.pointCameraToHotspot(hotspot);
             }
             
@@ -542,11 +796,12 @@ class TourEditor {
     /**
      * Remove hotspot
      */
-    removeHotspot(index) {
+    async removeHotspot(index) {
         const hotspot = this.hotspotEditor.getHotspot(index);
         if (this.hotspotEditor.removeHotspot(index)) {
-            this.lastRenderedSceneIndex = -1;
-            this.render();
+            await this.previewController.refreshHotspots();
+            this.uiController.renderHotspotList();
+            this.uiController.updateHotspotProperties(null);
             this.markUnsavedChanges();
             this.emit(EditorEvents.HOTSPOT_REMOVE, { hotspot, index });
         }
@@ -555,11 +810,11 @@ class TourEditor {
     /**
      * Duplicate hotspot
      */
-    duplicateHotspot(index) {
+    async duplicateHotspot(index) {
         const hotspot = this.hotspotEditor.duplicateHotspot(index);
         if (hotspot) {
-            this.lastRenderedSceneIndex = -1;
-            this.render();
+            await this.previewController.refreshHotspots();
+            this.uiController.renderHotspotList();
             this.markUnsavedChanges();
             this.emit(EditorEvents.HOTSPOT_DUPLICATE, { hotspot, originalIndex: index });
         }
@@ -582,7 +837,12 @@ class TourEditor {
     async updateCurrentHotspot(property, value) {
         const index = this.hotspotEditor.currentHotspotIndex;
         if (this.hotspotEditor.updateHotspot(index, property, value)) {
-            await this.previewController.updateHotspotMarker(index);
+            const contentProps = ['appearance.icon', 'appearance.color', 'action.type', 'action.url', 'action.target', 'tooltip.text', 'tooltip.description'];
+            if (contentProps.includes(property)) {
+                await this.previewController.refreshHotspots();
+            } else {
+                await this.previewController.updateHotspotMarker(index);
+            }
             this.uiController.renderHotspotList();
             this.markUnsavedChanges();
             this.emit(EditorEvents.HOTSPOT_UPDATE, { 

@@ -79,31 +79,35 @@ export class AssetManager {
     return new Promise((resolve, reject) => {
       const imgEl = document.createElement('img');
       imgEl.setAttribute('id', id);
-      imgEl.setAttribute('crossorigin', 'anonymous');
       
-      // Add cache-busting parameter to force fresh fetch with CORS headers
-      // This prevents browser from using cached non-CORS responses
-      // Only apply to plain http(s) URLs without a query string: data: and
-      // blob: URLs don't support query parameters, and URLs that already have
-      // a query string may be signed/served URLs whose signature must be
-      // preserved exactly.
+      const isDataOrBlob = url.startsWith('data:') || url.startsWith('blob:');
+      if (!isDataOrBlob) {
+        imgEl.setAttribute('crossorigin', 'anonymous');
+      }
+      
       let finalUrl = url;
-      if (/^https?:/i.test(url) && !url.includes('?')) {
+      if (!isDataOrBlob && /^https?:/i.test(url) && !url.includes('?')) {
         finalUrl = `${url}?_cors=1`;
       }
-      imgEl.setAttribute('src', finalUrl);
 
       imgEl.addEventListener('load', () => {
         this.loadedAssets.set(id, imgEl);
         resolve(imgEl);
-      });
+      }, { once: true });
 
       imgEl.addEventListener('error', (err) => {
-        console.error(`Failed to load asset: ${url}`, err);
+        console.error(`Failed to load asset: ${url.slice(0, 100)}`, err);
         reject(err);
-      });
+      }, { once: true });
 
+      imgEl.setAttribute('src', finalUrl);
       this.assetsEl.appendChild(imgEl);
+
+      // Handle synchronous or already cached completion
+      if (imgEl.complete && (imgEl.naturalWidth > 0 || isDataOrBlob)) {
+        this.loadedAssets.set(id, imgEl);
+        resolve(imgEl);
+      }
     });
   }
 
