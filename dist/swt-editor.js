@@ -5708,7 +5708,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>${title}</title>
     <!-- SWT Library: try same folder first (for web hosting / Altervista), then ../dist/ (local dev), then CDN -->
-    <script src="swt.min.js"></script>
+    <script src="swt.min.js?v=${runtimeVersion}"></script>
     <script>
       if (typeof SWT === "undefined") {
         document.write('<script src="../dist/swt.min.js"><\\/script>');
