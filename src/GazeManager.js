@@ -241,6 +241,15 @@ export class GazeManager {
       sceneId: currentSceneId
     });
 
+    const isPhoto = hotspotData.action?.type === 'photo' || hotspotData.type === 'photo';
+    if (isPhoto) {
+      this.resetProgress();
+      if (this.tour && typeof this.tour.openPhotoModal === 'function') {
+        this.tour.openPhotoModal(hotspotData.action, hotspotData);
+      }
+      return;
+    }
+
     const targetSceneId = hotspotData.action?.target;
     if (targetSceneId) {
       this.isNavigating = true;
@@ -343,15 +352,22 @@ export class GazeManager {
 /**
  * Checks whether a hotspot is configured as a Gaze Navigation hotspot.
  * @param {Object} hotspot
+ * @param {Object} [tourConfig] - Optional tour configuration to check global gaze settings
  * @returns {boolean}
  */
-export function isGazeHotspot(hotspot) {
+export function isGazeHotspot(hotspot, tourConfig = null) {
   if (!hotspot) return false;
+  if (tourConfig?.settings?.gazeNavigation || tourConfig?.settings?.gazeForAll) {
+    return true;
+  }
   return (
     hotspot.action?.type === 'gazeNavigate' ||
     hotspot.action?.type === 'gaze' ||
+    hotspot.action?.type === 'gazePhoto' ||
     hotspot.type === 'gazeNavigate' ||
-    hotspot.type === 'gaze'
+    hotspot.type === 'gaze' ||
+    hotspot.action?.gaze === true ||
+    hotspot.gaze === true
   );
 }
 

@@ -170,7 +170,15 @@ class ExportManager {
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>${title}</title>
-    <script src="https://unpkg.com/senangwebs-tour@${runtimeVersion}/dist/swt.min.js"></script>
+    <!-- SWT Library: try local relative path first, fallback to CDN -->
+    <script src="../dist/swt.min.js"></script>
+    <script>
+      if (typeof SWT === "undefined") {
+        document.write(
+          '<script src="https://unpkg.com/senangwebs-tour@${runtimeVersion}/dist/swt.min.js"><\\/script>'
+        );
+      }
+    </script>
   </head>
   <body>
     <a-scene id="tour-container">

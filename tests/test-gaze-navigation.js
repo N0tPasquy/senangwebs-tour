@@ -549,6 +549,54 @@ async function runTests() {
     assert(Math.abs(pDim.width - (1.5 * (1080 / 1920))) < 0.01, 'Portrait photo width maintains 9:16 ratio');
   }
 
+  // --- Test 20: Photo hotspot title and description resolution & gaze action trigger ---
+  console.log('\nTest 20: Photo hotspot title and description resolution & gaze action trigger');
+  {
+    const photoHotspot = {
+      id: 'photo-1',
+      action: { type: 'photo', url: 'photo.jpg' },
+      tooltip: { text: 'Stadio Maradona', description: 'Stadio Del Napoli' }
+    };
+
+    let openedData = null;
+    let openedHotspot = null;
+    const mockTour = {
+      getCurrentSceneId: () => 'scene-1',
+      emit: () => {},
+      openPhotoModal: (action, hotspot) => {
+        openedData = action;
+        openedHotspot = hotspot;
+      }
+    };
+
+    const mockSceneEl = new MockElement('a-scene');
+    const gazeManager = new GazeManager(mockTour, mockSceneEl);
+
+    // Gaze trigger on photo hotspot
+    gazeManager.triggerNavigation(photoHotspot);
+
+    assert(openedData !== null, 'openPhotoModal called upon gaze trigger');
+    assert(openedHotspot === photoHotspot, 'hotspotData passed to openPhotoModal');
+    
+    // Check title and description extraction logic
+    const title = openedData?.title || openedHotspot?.tooltip?.text || '';
+    const desc = openedData?.description || openedHotspot?.tooltip?.description || '';
+    assert(title === 'Stadio Maradona', 'Title correctly resolved from tooltip.text');
+    assert(desc === 'Stadio Del Napoli', 'Description correctly resolved from tooltip.description');
+  }
+
+  // --- Test 21: Global gaze configuration & gazeForAll support ---
+  console.log('\nTest 21: Global gaze configuration & gazeForAll support');
+  {
+    const standardHotspot = {
+      id: 'h-std',
+      action: { type: 'navigate', target: 'scene-2' }
+    };
+
+    assert(isGazeHotspot(standardHotspot) === false, 'Standard hotspot without global config is not gaze');
+    assert(isGazeHotspot(standardHotspot, { settings: { gazeNavigation: true } }) === true, 'Global gazeNavigation enables gaze for all hotspots');
+    assert(isGazeHotspot(standardHotspot, { settings: { gazeForAll: true } }) === true, 'Global gazeForAll enables gaze for all hotspots');
+  }
   console.log(`\n=== RESULTS: ${passCount} PASSED, ${failCount} FAILED ===\n`);
   if (failCount > 0) {
     process.exit(1);

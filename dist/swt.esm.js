@@ -1142,6 +1142,15 @@ class GazeManager {
       sceneId: currentSceneId
     });
 
+    const isPhoto = hotspotData.action?.type === 'photo' || hotspotData.type === 'photo';
+    if (isPhoto) {
+      this.resetProgress();
+      if (this.tour && typeof this.tour.openPhotoModal === 'function') {
+        this.tour.openPhotoModal(hotspotData.action, hotspotData);
+      }
+      return;
+    }
+
     const targetSceneId = hotspotData.action?.target;
     if (targetSceneId) {
       this.isNavigating = true;
@@ -1244,15 +1253,22 @@ class GazeManager {
 /**
  * Checks whether a hotspot is configured as a Gaze Navigation hotspot.
  * @param {Object} hotspot
+ * @param {Object} [tourConfig] - Optional tour configuration to check global gaze settings
  * @returns {boolean}
  */
-function isGazeHotspot(hotspot) {
+function isGazeHotspot(hotspot, tourConfig = null) {
   if (!hotspot) return false;
+  if (tourConfig?.settings?.gazeNavigation || tourConfig?.settings?.gazeForAll) {
+    return true;
+  }
   return (
     hotspot.action?.type === 'gazeNavigate' ||
     hotspot.action?.type === 'gaze' ||
+    hotspot.action?.type === 'gazePhoto' ||
     hotspot.type === 'gazeNavigate' ||
-    hotspot.type === 'gaze'
+    hotspot.type === 'gaze' ||
+    hotspot.action?.gaze === true ||
+    hotspot.gaze === true
   );
 }
 
@@ -1448,13 +1464,14 @@ class HotspotManager {
    * @param {number} index - Hotspot index
    */
   createHotspot(hotspot, index) {
-    const isGaze = isGazeHotspot(hotspot);
+    const isGaze = isGazeHotspot(hotspot, this.tour?.config);
     const isPhoto = hotspot.action?.type === 'photo' || hotspot.type === 'photo';
     const hotspotEl = document.createElement('a-entity');
     hotspotEl.classList.add('swt-hotspot');
     if (isGaze) {
       hotspotEl.classList.add('swt-gaze-hotspot');
-    } else if (isPhoto) {
+    }
+    if (isPhoto) {
       hotspotEl.classList.add('swt-photo-hotspot');
     }
     
@@ -1555,16 +1572,22 @@ class HotspotManager {
       visualEl.setAttribute('swt-gaze-hotspot', {
         hotspotData: JSON.stringify(hotspot)
       });
+      // Also attach swt-hotspot-listener so touch/click continues to work
+      visualEl.setAttribute('swt-hotspot-listener', {
+        hotspotData: JSON.stringify(hotspot)
+      });
 
-      // Add distinctive outer gaze ring indicator around the hotspot
-      const gazeRing = document.createElement('a-ring');
-      gazeRing.setAttribute('id', `swt-gaze-ring-${index}`);
-      gazeRing.setAttribute('radius-inner', '0.62');
-      gazeRing.setAttribute('radius-outer', '0.72');
-      gazeRing.setAttribute('scale', this.normalizeScale(hotspot.appearance?.scale ?? this.defaultSettings.scale));
-      gazeRing.setAttribute('material', `color: ${color}; side: double; transparent: true; opacity: 0.85; shader: flat`);
-      gazeRing.setAttribute('swt-billboard', 'enabled: true');
-      hotspotEl.appendChild(gazeRing);
+      // Add distinctive outer gaze ring indicator around navigation hotspots (omit on photos)
+      if (!isPhoto) {
+        const gazeRing = document.createElement('a-ring');
+        gazeRing.setAttribute('id', `swt-gaze-ring-${index}`);
+        gazeRing.setAttribute('radius-inner', '0.62');
+        gazeRing.setAttribute('radius-outer', '0.72');
+        gazeRing.setAttribute('scale', this.normalizeScale(hotspot.appearance?.scale ?? this.defaultSettings.scale));
+        gazeRing.setAttribute('material', `color: ${color}; side: double; transparent: true; opacity: 0.85; shader: flat`);
+        gazeRing.setAttribute('swt-billboard', 'enabled: true');
+        hotspotEl.appendChild(gazeRing);
+      }
     } else {
       visualEl.setAttribute('swt-hotspot-listener', {
         hotspotData: JSON.stringify(hotspot)
@@ -2210,16 +2233,17 @@ class Tour {
     }
 
     // Handle the action
-    if (hotspotData.action) {
-      this.handleAction(hotspotData.action);
+    if (hotspotData && hotspotData.action) {
+      this.handleAction(hotspotData.action, hotspotData);
     }
   }
 
   /**
    * Handle a hotspot action
    * @param {Object} action - The action object
+   * @param {Object} [hotspotData] - Optional full hotspot data object
    */
-  handleAction(action) {
+  handleAction(action, hotspotData = null) {
     switch (action.type) {
       case "navigateTo":
         if (action.target) {
@@ -2235,7 +2259,7 @@ class Tour {
 
       case "photo":
       case "image":
-        this.openPhotoModal(action);
+        this.openPhotoModal(action, hotspotData);
         break;
 
       default:
@@ -2247,14 +2271,38 @@ class Tour {
    * Open modal view displaying a static photo in large format with description
    * White background card for optimal readability
    * @param {Object} actionData - Action object containing url, title, description
+   * @param {Object} [hotspotData] - Optional parent hotspot data object
    */
-  openPhotoModal(actionData) {
-    if (!actionData) return;
+  openPhotoModal(actionData, hotspotData = null) {
+    if (!actionData && !hotspotData) return;
     this.closePhotoModal();
 
-    const imageUrl = actionData.url || actionData.imageUrl || "";
-    const title = actionData.title || "";
-    const description = actionData.description || "";
+    const imageUrl =
+      actionData?.url ||
+      actionData?.imageUrl ||
+      hotspotData?.action?.url ||
+      hotspotData?.imageUrl ||
+      "";
+
+    const title =
+      actionData?.title ||
+      hotspotData?.tooltip?.text ||
+      hotspotData?.title ||
+      hotspotData?.name ||
+      "";
+
+    const description =
+      actionData?.description ||
+      hotspotData?.tooltip?.description ||
+      hotspotData?.description ||
+      "";
+
+    // Auto-close timer only if explicitly configured (default 0: manual touch/click close)
+    const autoCloseSec =
+      actionData?.autoCloseDuration ??
+      hotspotData?.action?.autoCloseDuration ??
+      hotspotData?.autoCloseDuration ??
+      0;
 
     const escapeText = (str) =>
       str ? String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;") : "";
@@ -2283,6 +2331,9 @@ class Tour {
             </div>
           ` : ""}
         </div>
+        ${autoCloseSec > 0 ? `
+          <div class="swt-photo-modal-autoclose-bar" style="animation: swtModalAutoClose ${autoCloseSec}s linear forwards;" title="Chiusura automatica tra ${autoCloseSec}s"></div>
+        ` : ""}
       </div>
     `;
 
@@ -2302,6 +2353,12 @@ class Tour {
     };
     window.addEventListener("keydown", this._onModalKeyDown);
 
+    if (autoCloseSec > 0) {
+      this.photoModalTimer = setTimeout(() => {
+        this.closePhotoModal();
+      }, autoCloseSec * 1000);
+    }
+
     document.body.appendChild(modal);
     this.photoModalEl = modal;
   }
@@ -2310,10 +2367,16 @@ class Tour {
    * Close the active photo modal view
    */
   closePhotoModal() {
+    if (this.photoModalTimer) {
+      clearTimeout(this.photoModalTimer);
+      this.photoModalTimer = null;
+    }
+
     if (this._onModalKeyDown) {
       window.removeEventListener("keydown", this._onModalKeyDown);
       this._onModalKeyDown = null;
     }
+
     if (this.photoModalEl && this.photoModalEl.parentNode) {
       this.photoModalEl.parentNode.removeChild(this.photoModalEl);
     }
@@ -2431,6 +2494,19 @@ class Tour {
         color: #334155 !important;
         white-space: pre-wrap;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      }
+      .swt-photo-modal-autoclose-bar {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        height: 4px;
+        background: #3b82f6;
+        width: 100%;
+        transform-origin: left;
+      }
+      @keyframes swtModalAutoClose {
+        from { transform: scaleX(1); }
+        to { transform: scaleX(0); }
       }
       @media (max-width: 600px) {
         .swt-photo-modal-overlay {

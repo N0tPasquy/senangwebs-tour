@@ -120,26 +120,26 @@ class TourEditor {
         await this.uiController.populateIconGrid();
         
         // Load saved project if exists (but only if it has valid data)
-        if (this.storageManager.hasProject()) {
+        if (await this.storageManager.hasProject()) {
             try {
-                const projectData = this.storageManager.loadProject();
+                const projectData = await this.storageManager.loadProject();
                 if (projectData && projectData.scenes && projectData.scenes.length > 0) {
-                    this.loadProject();
+                    await this.loadProject();
                 } else {
                     // Invalid or empty project, clear it
                     console.error('Invalid or empty project data, clearing storage');
-                    this.storageManager.clearProject();
+                    await this.storageManager.clearProject();
                 }
             } catch (error) {
                 console.error('Error loading saved project:', error);
-                this.storageManager.clearProject();
+                await this.storageManager.clearProject();
             }
         }
         
         // Start auto-save if enabled
         if (this.options.autoSave) {
-            this.storageManager.startAutoSave(() => {
-                this.saveProject();
+            this.storageManager.startAutoSave(async () => {
+                await this.saveProject();
             }, this.options.autoSaveInterval);
         }
         
@@ -1035,13 +1035,13 @@ class TourEditor {
     /**
      * Save project
      */
-    saveProject() {
+    async saveProject() {
         const projectData = {
             config: this.config,
             scenes: this.sceneManager.getAllScenes()
         };
 
-        if (this.storageManager.saveProject(projectData)) {
+        if (await this.storageManager.saveProject(projectData)) {
             this.hasUnsavedChanges = false;
             showToast('Project saved', 'success');
             this.emit(EditorEvents.PROJECT_SAVE, { projectData });
@@ -1053,8 +1053,8 @@ class TourEditor {
     /**
      * Load project
      */
-    loadProject() {
-        const projectData = this.storageManager.loadProject();
+    async loadProject() {
+        const projectData = await this.storageManager.loadProject();
         if (projectData) {
             this.config = projectData.config || this.config;
             this.sceneManager.loadScenes(projectData.scenes || []);

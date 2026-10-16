@@ -192,13 +192,14 @@ export class HotspotManager {
    * @param {number} index - Hotspot index
    */
   createHotspot(hotspot, index) {
-    const isGaze = isGazeHotspot(hotspot);
+    const isGaze = isGazeHotspot(hotspot, this.tour?.config);
     const isPhoto = hotspot.action?.type === 'photo' || hotspot.type === 'photo';
     const hotspotEl = document.createElement('a-entity');
     hotspotEl.classList.add('swt-hotspot');
     if (isGaze) {
       hotspotEl.classList.add('swt-gaze-hotspot');
-    } else if (isPhoto) {
+    }
+    if (isPhoto) {
       hotspotEl.classList.add('swt-photo-hotspot');
     }
     
@@ -299,16 +300,22 @@ export class HotspotManager {
       visualEl.setAttribute('swt-gaze-hotspot', {
         hotspotData: JSON.stringify(hotspot)
       });
+      // Also attach swt-hotspot-listener so touch/click continues to work
+      visualEl.setAttribute('swt-hotspot-listener', {
+        hotspotData: JSON.stringify(hotspot)
+      });
 
-      // Add distinctive outer gaze ring indicator around the hotspot
-      const gazeRing = document.createElement('a-ring');
-      gazeRing.setAttribute('id', `swt-gaze-ring-${index}`);
-      gazeRing.setAttribute('radius-inner', '0.62');
-      gazeRing.setAttribute('radius-outer', '0.72');
-      gazeRing.setAttribute('scale', this.normalizeScale(hotspot.appearance?.scale ?? this.defaultSettings.scale));
-      gazeRing.setAttribute('material', `color: ${color}; side: double; transparent: true; opacity: 0.85; shader: flat`);
-      gazeRing.setAttribute('swt-billboard', 'enabled: true');
-      hotspotEl.appendChild(gazeRing);
+      // Add distinctive outer gaze ring indicator around navigation hotspots (omit on photos)
+      if (!isPhoto) {
+        const gazeRing = document.createElement('a-ring');
+        gazeRing.setAttribute('id', `swt-gaze-ring-${index}`);
+        gazeRing.setAttribute('radius-inner', '0.62');
+        gazeRing.setAttribute('radius-outer', '0.72');
+        gazeRing.setAttribute('scale', this.normalizeScale(hotspot.appearance?.scale ?? this.defaultSettings.scale));
+        gazeRing.setAttribute('material', `color: ${color}; side: double; transparent: true; opacity: 0.85; shader: flat`);
+        gazeRing.setAttribute('swt-billboard', 'enabled: true');
+        hotspotEl.appendChild(gazeRing);
+      }
     } else {
       visualEl.setAttribute('swt-hotspot-listener', {
         hotspotData: JSON.stringify(hotspot)

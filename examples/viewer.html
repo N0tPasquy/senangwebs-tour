@@ -283,8 +283,28 @@
       const errorText = document.getElementById("errorText");
 
       // Initialize
-      function init() {
+      async function init() {
         setupEventListeners();
+
+        // Check for tour URL parameter (?tour=... or ?src=...)
+        const urlParams = new URLSearchParams(window.location.search);
+        const tourUrl = urlParams.get("tour") || urlParams.get("src");
+        if (tourUrl) {
+          showLoading("Fetching tour...");
+          try {
+            const res = await fetch(tourUrl);
+            if (!res.ok) {
+              throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+            }
+            const data = await res.json();
+            await loadTour(data);
+          } catch (error) {
+            console.error("Failed to load tour from URL:", error);
+            showError("Failed to load tour: " + error.message);
+            showUploadArea();
+          }
+          return;
+        }
 
         // Check for tour data in URL hash
         if (window.location.hash) {

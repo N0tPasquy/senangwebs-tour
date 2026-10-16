@@ -381,16 +381,17 @@ class Tour {
     }
 
     // Handle the action
-    if (hotspotData.action) {
-      this.handleAction(hotspotData.action);
+    if (hotspotData && hotspotData.action) {
+      this.handleAction(hotspotData.action, hotspotData);
     }
   }
 
   /**
    * Handle a hotspot action
    * @param {Object} action - The action object
+   * @param {Object} [hotspotData] - Optional full hotspot data object
    */
-  handleAction(action) {
+  handleAction(action, hotspotData = null) {
     switch (action.type) {
       case "navigateTo":
         if (action.target) {
@@ -406,7 +407,7 @@ class Tour {
 
       case "photo":
       case "image":
-        this.openPhotoModal(action);
+        this.openPhotoModal(action, hotspotData);
         break;
 
       default:
@@ -418,14 +419,38 @@ class Tour {
    * Open modal view displaying a static photo in large format with description
    * White background card for optimal readability
    * @param {Object} actionData - Action object containing url, title, description
+   * @param {Object} [hotspotData] - Optional parent hotspot data object
    */
-  openPhotoModal(actionData) {
-    if (!actionData) return;
+  openPhotoModal(actionData, hotspotData = null) {
+    if (!actionData && !hotspotData) return;
     this.closePhotoModal();
 
-    const imageUrl = actionData.url || actionData.imageUrl || "";
-    const title = actionData.title || "";
-    const description = actionData.description || "";
+    const imageUrl =
+      actionData?.url ||
+      actionData?.imageUrl ||
+      hotspotData?.action?.url ||
+      hotspotData?.imageUrl ||
+      "";
+
+    const title =
+      actionData?.title ||
+      hotspotData?.tooltip?.text ||
+      hotspotData?.title ||
+      hotspotData?.name ||
+      "";
+
+    const description =
+      actionData?.description ||
+      hotspotData?.tooltip?.description ||
+      hotspotData?.description ||
+      "";
+
+    // Auto-close timer only if explicitly configured (default 0: manual touch/click close)
+    const autoCloseSec =
+      actionData?.autoCloseDuration ??
+      hotspotData?.action?.autoCloseDuration ??
+      hotspotData?.autoCloseDuration ??
+      0;
 
     const escapeText = (str) =>
       str ? String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;") : "";
@@ -454,6 +479,9 @@ class Tour {
             </div>
           ` : ""}
         </div>
+        ${autoCloseSec > 0 ? `
+          <div class="swt-photo-modal-autoclose-bar" style="animation: swtModalAutoClose ${autoCloseSec}s linear forwards;" title="Chiusura automatica tra ${autoCloseSec}s"></div>
+        ` : ""}
       </div>
     `;
 
@@ -473,6 +501,12 @@ class Tour {
     };
     window.addEventListener("keydown", this._onModalKeyDown);
 
+    if (autoCloseSec > 0) {
+      this.photoModalTimer = setTimeout(() => {
+        this.closePhotoModal();
+      }, autoCloseSec * 1000);
+    }
+
     document.body.appendChild(modal);
     this.photoModalEl = modal;
   }
@@ -481,10 +515,16 @@ class Tour {
    * Close the active photo modal view
    */
   closePhotoModal() {
+    if (this.photoModalTimer) {
+      clearTimeout(this.photoModalTimer);
+      this.photoModalTimer = null;
+    }
+
     if (this._onModalKeyDown) {
       window.removeEventListener("keydown", this._onModalKeyDown);
       this._onModalKeyDown = null;
     }
+
     if (this.photoModalEl && this.photoModalEl.parentNode) {
       this.photoModalEl.parentNode.removeChild(this.photoModalEl);
     }
@@ -602,6 +642,19 @@ class Tour {
         color: #334155 !important;
         white-space: pre-wrap;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      }
+      .swt-photo-modal-autoclose-bar {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        height: 4px;
+        background: #3b82f6;
+        width: 100%;
+        transform-origin: left;
+      }
+      @keyframes swtModalAutoClose {
+        from { transform: scaleX(1); }
+        to { transform: scaleX(0); }
       }
       @media (max-width: 600px) {
         .swt-photo-modal-overlay {
