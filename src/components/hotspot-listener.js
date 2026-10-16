@@ -61,9 +61,16 @@ if (typeof AFRAME !== 'undefined') {
 
     onMouseEnter: function (evt) {
       const hotspotData = JSON.parse(this.data.hotspotData);
+      const isImageHotspot =
+        hotspotData?.action?.type === 'photo' ||
+        hotspotData?.action?.type === 'image' ||
+        hotspotData?.action?.type === 'gazeImage' ||
+        hotspotData?.type === 'photo' ||
+        hotspotData?.type === 'image' ||
+        hotspotData?.type === 'gazeImage';
       
-      // Show tooltip if exists
-      if (hotspotData.tooltip) {
+      // Show tooltip if exists (only for standard icon hotspots; photo and gazeImage already display their title)
+      if (hotspotData.tooltip && !isImageHotspot) {
         this.el.sceneEl.emit('swt-hotspot-hover', {
           hotspotData: hotspotData,
           isHovering: true
@@ -71,14 +78,23 @@ if (typeof AFRAME !== 'undefined') {
       }
 
       // Add visual feedback
-      this.el.setAttribute('scale', this.getScaledSize(1.2));
+      if (!isImageHotspot) {
+        this.el.setAttribute('scale', this.getScaledSize(1.2));
+      }
     },
 
     onMouseLeave: function (evt) {
       const hotspotData = JSON.parse(this.data.hotspotData);
+      const isImageHotspot =
+        hotspotData?.action?.type === 'photo' ||
+        hotspotData?.action?.type === 'image' ||
+        hotspotData?.action?.type === 'gazeImage' ||
+        hotspotData?.type === 'photo' ||
+        hotspotData?.type === 'image' ||
+        hotspotData?.type === 'gazeImage';
       
       // Hide tooltip
-      if (hotspotData.tooltip) {
+      if (hotspotData.tooltip && !isImageHotspot) {
         this.el.sceneEl.emit('swt-hotspot-hover', {
           hotspotData: hotspotData,
           isHovering: false

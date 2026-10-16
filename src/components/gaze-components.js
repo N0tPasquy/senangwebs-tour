@@ -2,6 +2,7 @@
  * A-Frame components for Gaze Navigation hotspots and visual progress indicator
  */
 import AFRAME from 'aframe';
+import { StaticPhotoController } from '../StaticPhotoCard.js';
 
 const THREE = (typeof AFRAME !== 'undefined' && AFRAME.THREE) || (typeof window !== 'undefined' && window.THREE);
 
@@ -50,17 +51,20 @@ if (typeof AFRAME !== 'undefined') {
       this.isGazing = true;
 
       const hotspotData = this.getHotspotData();
+      const isGazeImage = hotspotData.action?.type === 'gazeImage' || hotspotData.type === 'gazeImage';
 
-      // Show tooltip if exists
-      if (hotspotData.tooltip && this.el.sceneEl) {
+      // Show tooltip if exists (only for standard navigation icons, NOT for gazeImage which already has its own title above the image)
+      if (hotspotData.tooltip && this.el.sceneEl && !isGazeImage) {
         this.el.sceneEl.emit('swt-hotspot-hover', {
           hotspotData: hotspotData,
           isHovering: true
         });
       }
 
-      // Add visual hover feedback on hotspot itself
-      this.el.setAttribute('scale', this.getScaledSize(1.15));
+      // Add visual hover feedback on hotspot itself (only for standard navigation icons; gazeImage has its continuous zoom)
+      if (!isGazeImage) {
+        this.el.setAttribute('scale', this.getScaledSize(1.15));
+      }
 
       // Emit gaze enter for GazeManager
       if (this.el.sceneEl) {
@@ -76,9 +80,10 @@ if (typeof AFRAME !== 'undefined') {
       this.isGazing = false;
 
       const hotspotData = this.getHotspotData();
+      const isGazeImage = hotspotData.action?.type === 'gazeImage' || hotspotData.type === 'gazeImage';
 
-      // Hide tooltip if exists
-      if (hotspotData.tooltip && this.el.sceneEl) {
+      // Hide tooltip if exists (only for standard navigation icons)
+      if (hotspotData.tooltip && this.el.sceneEl && !isGazeImage) {
         this.el.sceneEl.emit('swt-hotspot-hover', {
           hotspotData: hotspotData,
           isHovering: false
@@ -163,20 +168,49 @@ if (typeof AFRAME !== 'undefined') {
 
   /**
    * Component for static photos in 3D scene.
-   * Shows the floating title ONLY when the element is focused by the reticle/cursor.
+   * Hands-free VR navigation:
+   * - Shows floating title and starts 2-second countdown on gaze focus
+   * - Opens an enlarged 3D card in place of the original photo
+   * - Card includes photo on left, title & description on right, and 'X' close button at top-right
+   * - Focusing on 'X' for 2 seconds closes the card and restores original photo to its initial state
    */
   AFRAME.registerComponent('swt-static-photo', {
     schema: {
       titleId: { type: 'string', default: '' },
-      hotspotData: { type: 'string', default: '{}' }
+      hotspotData: { type: 'string', default: '{}' },
+      isEditor: { type: 'boolean', default: false }
     },
 
     init: function () {
-      this.onEnter = this.onEnter.bind(this);
-      this.onLeave = this.onLeave.bind(this);
-      this.onClick = this.onClick.bind(this);
-      this.titleEl = null;
-      this.isFocused = false;
+      let hotspotData = {};
+      try {
+        hotspotData = JSON.parse(this.data.hotspotData);
+      } catch (e) {}
+
+      this.controller = new StaticPhotoController(this.el, hotspotData, {
+        titleId: this.data.titleId,
+        isEditor: this.data.isEditor
+      });
+
+      this.onEnter = (evt) => {
+        const cursorEl = evt?.detail?.cursorEl;
+        if (cursorEl && (cursorEl.id === 'swt-mouse-cursor' || cursorEl.getAttribute?.('cursor')?.rayOrigin === 'mouse')) {
+          return;
+        }
+        this.controller?.handlePhotoEnter();
+      };
+
+      this.onLeave = (evt) => {
+        const cursorEl = evt?.detail?.cursorEl;
+        if (cursorEl && (cursorEl.id === 'swt-mouse-cursor' || cursorEl.getAttribute?.('cursor')?.rayOrigin === 'mouse')) {
+          return;
+        }
+        this.controller?.handlePhotoLeave();
+      };
+
+      this.onClick = () => {
+        this.controller?.handlePhotoClick();
+      };
     },
 
     play: function () {
@@ -193,65 +227,32 @@ if (typeof AFRAME !== 'undefined') {
       this.el.removeEventListener('raycaster-intersected', this.onEnter);
       this.el.removeEventListener('raycaster-intersected-cleared', this.onLeave);
       this.el.removeEventListener('click', this.onClick);
-      this.handleLeave();
+      if (this.controller) {
+        this.controller.handlePhotoLeave();
+      }
     },
 
     remove: function () {
-      this.handleLeave();
+      if (this.controller) {
+        this.controller.destroy();
+        this.controller = null;
+      }
+    },
+
+    tick: function () {
+      this.controller?.tick();
     },
 
     getTitleEl: function () {
-      if (!this.titleEl && this.data.titleId) {
-        this.titleEl =
-          (this.el.parentNode && this.el.parentNode.querySelector(`#${this.data.titleId}`)) ||
-          (this.el.sceneEl && this.el.sceneEl.querySelector(`#${this.data.titleId}`)) ||
-          (typeof document !== 'undefined' && document.getElementById(this.data.titleId));
-      }
-      return this.titleEl;
+      return this.controller?.getTitleEl();
     },
 
-    handleEnter: function () {
-      if (this.isFocused) return;
-      this.isFocused = true;
-      const title = this.getTitleEl();
-      if (title) {
-        title.setAttribute('visible', 'true');
-      }
+    openCard: function () {
+      this.controller?.openCard();
     },
 
-    handleLeave: function () {
-      if (!this.isFocused) return;
-      this.isFocused = false;
-      const title = this.getTitleEl();
-      if (title) {
-        title.setAttribute('visible', 'false');
-      }
-    },
-
-    onEnter: function (evt) {
-      const cursorEl = evt?.detail?.cursorEl;
-      if (cursorEl && (cursorEl.id === 'swt-mouse-cursor' || cursorEl.getAttribute?.('cursor')?.rayOrigin === 'mouse')) {
-        return;
-      }
-      this.handleEnter();
-    },
-
-    onLeave: function (evt) {
-      const cursorEl = evt?.detail?.cursorEl;
-      if (cursorEl && (cursorEl.id === 'swt-mouse-cursor' || cursorEl.getAttribute?.('cursor')?.rayOrigin === 'mouse')) {
-        return;
-      }
-      this.handleLeave();
-    },
-
-    onClick: function () {
-      // In editor mode, allow clicking to select the photo in editor panel
-      try {
-        const hotspotData = JSON.parse(this.data.hotspotData);
-        if (this.el.sceneEl) {
-          this.el.sceneEl.emit('swt-hotspot-clicked', { hotspotData });
-        }
-      } catch (e) {}
+    closeCard: function () {
+      this.controller?.closeCard();
     }
   });
 

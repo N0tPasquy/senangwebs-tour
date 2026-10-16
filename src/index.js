@@ -375,7 +375,7 @@ class Tour {
       sceneId: currentSceneId,
     });
 
-    // In editor mode, navigation actions are disabled (use "Vai" in sidebar)
+    // In editor mode, navigation actions are disabled (use "Go" in sidebar)
     if (this.config.isEditor) {
       return;
     }
@@ -409,7 +409,7 @@ class Tour {
 
       case "photo":
       case "image":
-        // Static photos are non-clickable and display their title in 3D without modal
+        // Static photo hotspots in 3D scene use hands-free in-scene 3D Card
         break;
 
       default:
@@ -467,11 +467,11 @@ class Tour {
 
     modal.innerHTML = `
       <div class="swt-photo-modal-card">
-        <button type="button" class="swt-photo-modal-close" aria-label="Chiudi">✕</button>
+        <button type="button" class="swt-photo-modal-close" aria-label="Close">✕</button>
         <div class="swt-photo-modal-content">
           ${imageUrl ? `
             <div class="swt-photo-modal-img-wrap">
-              <img class="swt-photo-modal-img" src="${imageUrl}" alt="${escapeText(title) || 'Foto'}" />
+              <img class="swt-photo-modal-img" src="${imageUrl}" alt="${escapeText(title) || 'Photo'}" />
             </div>
           ` : ""}
           ${(title || description) ? `
@@ -482,7 +482,7 @@ class Tour {
           ` : ""}
         </div>
         ${autoCloseSec > 0 ? `
-          <div class="swt-photo-modal-autoclose-bar" style="animation: swtModalAutoClose ${autoCloseSec}s linear forwards;" title="Chiusura automatica tra ${autoCloseSec}s"></div>
+          <div class="swt-photo-modal-autoclose-bar" style="animation: swtModalAutoClose ${autoCloseSec}s linear forwards;" title="Auto-closing in ${autoCloseSec}s"></div>
         ` : ""}
       </div>
     `;

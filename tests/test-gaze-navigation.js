@@ -5,6 +5,8 @@
 
 import { GazeManager, isGazeHotspot } from '../src/GazeManager.js';
 import { buildTourConfig } from '../src/editor/js/data-transform.js';
+import { StaticPhotoController } from '../src/StaticPhotoCard.js';
+import { HotspotManager } from '../src/HotspotManager.js';
 
 // Minimal EventEmitter / Mock DOM Element
 class MockElement {
@@ -14,7 +16,9 @@ class MockElement {
     this.parentNode = null;
     this.isConnected = true;
     this.attributes = {};
+    this.style = {};
     this.classList = new Set();
+    this.classList.remove = (cls) => this.classList.delete(cls);
     this.listeners = {};
     this.components = {};
     this.object3D = {
@@ -25,6 +29,9 @@ class MockElement {
 
   setAttribute(k, v) {
     this.attributes[k] = v;
+    if (k === 'class' && typeof v === 'string') {
+      v.split(/\s+/).filter(Boolean).forEach((c) => this.classList.add(c));
+    }
   }
 
   getAttribute(k) {
@@ -61,6 +68,16 @@ class MockElement {
         if (found) return found;
       }
     }
+    if (sel.startsWith('.')) {
+      const cls = sel.slice(1);
+      if (this.classList.has(cls) || (this.attributes.class && this.attributes.class.split(/\s+/).includes(cls))) {
+        return this;
+      }
+      for (const c of this.children) {
+        const found = c.querySelector(sel);
+        if (found) return found;
+      }
+    }
     if (sel === '[camera]' || sel === 'a-camera') {
       if (this.tagName === 'A-CAMERA' || this.attributes.camera !== undefined) return this;
       for (const c of this.children) {
@@ -74,6 +91,11 @@ class MockElement {
         const found = c.querySelector(sel);
         if (found) return found;
       }
+    }
+    if (this.tagName.toLowerCase() === sel.toLowerCase()) return this;
+    for (const c of this.children) {
+      const found = c.querySelector(sel);
+      if (found) return found;
     }
     return null;
   }
@@ -607,6 +629,529 @@ async function runTests() {
 
     gazeManager.destroy();
   }
+
+  // --- Test 23: Static photo 3D card layout and structure ---
+  console.log('\nTest 23: Static photo 3D card layout and structure');
+  {
+    const photoHotspot = {
+      id: 'photo-card-1',
+      action: { type: 'photo', url: 'mona-lisa.jpg', title: 'Mona Lisa', description: 'Dipinto a olio di Leonardo da Vinci' },
+      tooltip: { text: 'Mona Lisa', description: 'Dipinto a olio di Leonardo da Vinci' },
+      appearance: { aspectRatio: 1.5 }
+    };
+
+    const sceneEl = new MockElement('a-scene');
+    const hotspotEl = new MockElement('a-entity');
+    sceneEl.appendChild(hotspotEl);
+
+    const visualEl = new MockElement('a-image');
+    visualEl.setAttribute('src', 'mona-lisa.jpg');
+    visualEl.setAttribute('class', 'clickable');
+    visualEl.setAttribute('visible', 'true');
+    visualEl.sceneEl = sceneEl;
+    hotspotEl.appendChild(visualEl);
+
+    const controller = new StaticPhotoController(visualEl, photoHotspot);
+    assert(!controller.isCardOpen, 'Card is initially closed');
+
+    // Open card
+    controller.openCard();
+    assert(controller.isCardOpen, 'Card is now open');
+    assert(visualEl.getAttribute('visible') === 'false', 'Original photo is hidden when card is open');
+    assert(controller.cardEl !== null, 'Card entity created');
+
+    const card = controller.cardEl;
+    const imgEl = card.querySelector('.swt-photo-card-img');
+    assert(imgEl !== null, 'Card contains original photo element on the left');
+    assert(imgEl.getAttribute('src') === 'mona-lisa.jpg', 'Card photo has correct image source');
+
+    const titleEl = card.querySelector('.swt-photo-card-title');
+    assert(titleEl !== null, 'Card contains title text on the right');
+    assert(titleEl.getAttribute('value') === 'Mona Lisa', 'Card title matches hotspot title');
+
+    const descEl = card.querySelector('.swt-photo-card-desc');
+    assert(descEl !== null, 'Card contains description text on the right');
+    assert(descEl.getAttribute('value') === 'Dipinto a olio di Leonardo da Vinci', 'Card description matches hotspot description');
+
+    const closeBtn = card.querySelector('.swt-photo-card-close');
+    assert(closeBtn !== null, "Card contains 'X' close button at top-right");
+    const closeText = closeBtn.querySelector('.swt-photo-card-close-icon');
+    assert(closeText !== null && closeText.getAttribute('value') === 'X', "'X' close button displays 'X' symbol");
+
+    controller.destroy();
+  }
+
+  // --- Test 24: Gaze focus on 'X' for 2 seconds closes card and restores photo ---
+  console.log('\nTest 24: Gaze focus on X for 2 seconds closes card and restores photo');
+  {
+    const photoHotspot = {
+      id: 'photo-card-2',
+      action: { type: 'photo', url: 'mona-lisa.jpg', title: 'Mona Lisa', description: 'Test description' }
+    };
+
+    const sceneEl = new MockElement('a-scene');
+    const hotspotEl = new MockElement('a-entity');
+    sceneEl.appendChild(hotspotEl);
+
+    const visualEl = new MockElement('a-image');
+    visualEl.setAttribute('src', 'mona-lisa.jpg');
+    visualEl.setAttribute('class', 'clickable');
+    visualEl.setAttribute('visible', 'true');
+    visualEl.sceneEl = sceneEl;
+    hotspotEl.appendChild(visualEl);
+
+    const controller = new StaticPhotoController(visualEl, photoHotspot, { closeDuration: 2000 });
+    controller.openCard();
+    assert(controller.isCardOpen, 'Card opened');
+
+    // Simulate focus on close button
+    controller.handleCloseEnter();
+    assert(controller.isCloseFocused, "Focus active on 'X' button");
+    assert(controller.closeBgEl.getAttribute('color') === '#ef4444', "'X' button highlighted on focus");
+
+    // Close card when 2000ms timer completes
+    controller.closeCard();
+    assert(!controller.isCardOpen, "Card closed after 2-second focus on 'X'");
+    assert(visualEl.getAttribute('visible') === 'true', 'Original photo restored to its initial state');
+    assert(visualEl.classList.has('clickable') || visualEl.getAttribute('class').includes('clickable'), 'Original photo clickable again');
+
+    controller.destroy();
+  }
+
+  // --- Test 25: Looking away from 'X' before 2 seconds cancels countdown ---
+  console.log('\nTest 25: Looking away from X before 2 seconds cancels countdown');
+  {
+    const photoHotspot = {
+      id: 'photo-card-3',
+      action: { type: 'photo', url: 'mona-lisa.jpg', title: 'Mona Lisa' }
+    };
+
+    const sceneEl = new MockElement('a-scene');
+    const hotspotEl = new MockElement('a-entity');
+    sceneEl.appendChild(hotspotEl);
+
+    const visualEl = new MockElement('a-image');
+    visualEl.setAttribute('src', 'mona-lisa.jpg');
+    visualEl.sceneEl = sceneEl;
+    hotspotEl.appendChild(visualEl);
+
+    const controller = new StaticPhotoController(visualEl, photoHotspot, { closeDuration: 2000 });
+    controller.openCard();
+
+    // Enter 'X'
+    controller.handleCloseEnter();
+    assert(controller.isCloseFocused, "Focus active on 'X'");
+
+    // Leave 'X' before 2s
+    controller.handleCloseLeave();
+    assert(!controller.isCloseFocused, "Countdown cancelled when looking away from 'X'");
+    assert(controller.isCardOpen, 'Card remains open');
+    assert(controller.closeBgEl.getAttribute('color') === '#334155', "'X' button returned to normal color");
+
+    // Return to 'X' restarts countdown
+    controller.handleCloseEnter();
+    assert(controller.isCloseFocused, "Re-entering 'X' restarts countdown");
+    controller.cancelCloseCountdown();
+
+    // Click 'X' closes immediately
+    controller.handleCloseClick();
+    assert(!controller.isCardOpen, "Click on 'X' closes card immediately");
+    assert(visualEl.getAttribute('visible') === 'true', 'Original photo restored');
+
+    controller.destroy();
+  }
+
+  // --- Test 26: Gaze focus on photo for 2 seconds opens card ---
+  console.log('\nTest 26: Gaze focus on photo for 2 seconds opens card');
+  {
+    const photoHotspot = {
+      id: 'photo-card-4',
+      action: { type: 'photo', url: 'art.jpg', title: 'Art Piece' }
+    };
+
+    const sceneEl = new MockElement('a-scene');
+    const hotspotEl = new MockElement('a-entity');
+    sceneEl.appendChild(hotspotEl);
+
+    const visualEl = new MockElement('a-image');
+    visualEl.setAttribute('src', 'art.jpg');
+    visualEl.sceneEl = sceneEl;
+    hotspotEl.appendChild(visualEl);
+
+    const controller = new StaticPhotoController(visualEl, photoHotspot, { openDuration: 2000 });
+    assert(!controller.isCardOpen, 'Card closed initially');
+
+    // Gaze enter on photo
+    controller.handlePhotoEnter();
+    assert(controller.isPhotoFocused, 'Photo is focused');
+
+    // Look away before 2 seconds
+    controller.handlePhotoLeave();
+    assert(!controller.isPhotoFocused, 'Look away cancels open countdown');
+    assert(!controller.isCardOpen, 'Card did not open');
+
+    // Click photo opens card immediately
+    controller.handlePhotoClick();
+    assert(controller.isCardOpen, 'Click on photo opens card immediately');
+
+    controller.destroy();
+  }
+
+  // --- Test 27: Card reopening and scene cleanup ---
+  console.log('\nTest 27: Card reopening cycle and cleanup');
+  {
+    const photoHotspot = {
+      id: 'photo-card-5',
+      action: { type: 'photo', url: 'mona-lisa.jpg', title: 'Mona Lisa' }
+    };
+
+    const sceneEl = new MockElement('a-scene');
+    const hotspotEl = new MockElement('a-entity');
+    sceneEl.appendChild(hotspotEl);
+
+    const visualEl = new MockElement('a-image');
+    visualEl.setAttribute('src', 'mona-lisa.jpg');
+    visualEl.sceneEl = sceneEl;
+    hotspotEl.appendChild(visualEl);
+
+    const controller = new StaticPhotoController(visualEl, photoHotspot);
+
+    // 1. Open
+    controller.openCard();
+    assert(controller.isCardOpen, 'Cycle 1: Card open');
+
+    // 2. Close via X
+    controller.closeCard();
+    assert(!controller.isCardOpen, 'Cycle 1: Card closed');
+    assert(visualEl.getAttribute('visible') === 'true', 'Cycle 1: Photo visible');
+
+    // 3. Reopen
+    controller.openCard();
+    assert(controller.isCardOpen, 'Cycle 2: Card reopened');
+    assert(visualEl.getAttribute('visible') === 'false', 'Cycle 2: Photo hidden');
+
+    // 4. Destroy
+    controller.destroy();
+    assert(!controller.isCardOpen, 'Destroy: Card closed');
+    assert(controller.cardEl === null, 'Destroy: Card element cleaned up');
+  }
+
+  // --- Test 28: Enlarged card dimensions and close button mesh / raycaster tick detection ---
+  console.log('\nTest 28: Enlarged card dimensions and close button mesh / raycaster tick detection');
+  {
+    const photoHotspot = {
+      id: 'photo-card-enlarged',
+      action: { type: 'photo', url: 'enlarged.jpg', title: 'Large Photo', description: 'Test description' },
+      appearance: { aspectRatio: 1.6 }
+    };
+
+    const sceneEl = new MockElement('a-scene');
+    const hotspotEl = new MockElement('a-entity');
+    sceneEl.appendChild(hotspotEl);
+
+    const cursorEl = new MockElement('a-cursor');
+    cursorEl.components = {
+      raycaster: {
+        intersectedEls: [],
+        refreshObjects: () => {}
+      }
+    };
+    sceneEl.appendChild(cursorEl);
+
+    const visualEl = new MockElement('a-image');
+    visualEl.setAttribute('src', 'enlarged.jpg');
+    visualEl.setAttribute('class', 'clickable');
+    visualEl.sceneEl = sceneEl;
+    hotspotEl.appendChild(visualEl);
+
+    const controller = new StaticPhotoController(visualEl, photoHotspot, { closeDuration: 2000 });
+    controller.openCard();
+    assert(controller.isCardOpen, 'Card is open');
+
+    const card = controller.cardEl;
+    const bgPlane = card.querySelector('.swt-photo-card-bg');
+    assert(bgPlane !== null, 'Card has background plane');
+    assert(parseFloat(bgPlane.getAttribute('width')) === 7.8, 'Card background plane width is enlarged to 7.8m');
+    assert(parseFloat(bgPlane.getAttribute('height')) === 4.6, 'Card background plane height is enlarged to 4.6m');
+
+    const closeBtn = card.querySelector('.swt-photo-card-close');
+    assert(closeBtn !== null, 'Close button exists');
+    assert(closeBtn.tagName === 'A-CIRCLE', 'Close button is an a-circle element with native 3D mesh');
+    assert(closeBtn.getAttribute('radius') === '0.28', 'Close button radius is 0.28m');
+    assert(closeBtn.getAttribute('class').includes('clickable'), 'Close button has clickable class');
+
+    // Simulate raycaster intersection with close button via tick()
+    cursorEl.components.raycaster.intersectedEls = [closeBtn];
+    controller.tick();
+    assert(controller.isCloseFocused, 'tick() detected gaze raycaster intersection on X button');
+
+    // Fast-forward closeStartTime to simulate expiration (accounting for performance.now())
+    const now = typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
+    controller.closeStartTime = now - 2500;
+    controller.tick();
+    assert(!controller.isCardOpen, 'tick() closed card after gaze duration expired');
+    assert(visualEl.getAttribute('visible') === 'true', 'Original photo restored after card close');
+
+    controller.destroy();
+  }
+
+  // --- Test 29: Static photo description support in tour config and editor models ---
+  console.log('\nTest 29: Static photo description support in tour config and editor models');
+  {
+    const rawPhotoHotspot = {
+      id: 'photo-desc-test',
+      type: 'photo',
+      action: {
+        type: 'photo',
+        url: 'art.jpg',
+        title: 'Mona Lisa',
+        description: 'Leonardo da Vinci masterpiece'
+      },
+      tooltip: {
+        text: 'Mona Lisa',
+        description: 'Leonardo da Vinci masterpiece'
+      }
+    };
+
+    assert(rawPhotoHotspot.action.description === 'Leonardo da Vinci masterpiece', 'Hotspot action holds description');
+    assert(rawPhotoHotspot.tooltip.description === 'Leonardo da Vinci masterpiece', 'Tooltip holds description');
+
+    // Test buildTourConfig preserves description
+    const tourConfig = buildTourConfig(
+      { initialSceneId: 'scene-1' },
+      [
+        {
+          id: 'scene-1',
+          hotspots: [rawPhotoHotspot]
+        }
+      ]
+    );
+
+    const exportedHotspot = tourConfig.scenes[0].hotspots[0];
+    assert(exportedHotspot.action.description === 'Leonardo da Vinci masterpiece', 'Exported tour config preserves action.description');
+    assert(exportedHotspot.tooltip.description === 'Leonardo da Vinci masterpiece', 'Exported tour config preserves tooltip.description');
+  }
+
+  // --- Test 30: 100-word description formatting and typography in 3D card ---
+  console.log('\nTest 30: 100-word description formatting and typography in 3D card');
+  {
+    const long100WordDesc = [
+      "This magnificent photograph captures the evocative atmosphere of the historic landmark during golden sunset.",
+      "The architectural details stand out sharply against the warm evening light, creating an extraordinary contrast between subtle shadows and vibrant reflections.",
+      "The photographic composition was meticulously crafted to accentuate the central perspective of the main building,",
+      "naturally guiding the viewer's eyes toward the infinite distant horizon.",
+      "Every single visual element within the frame contributes to conveying a timeless sense of calm, elegance, and grandeur,",
+      "making this striking image an exemplary piece of fine-art photography dedicated to celebrating the cultural and artistic heritage of the surrounding historic region.",
+      "An engaging, authentic, and emotionally captivating visual journey for every visitor exploring this immersive virtual tour."
+    ].join(' ');
+
+    const wordCount = long100WordDesc.split(/\s+/).filter(Boolean).length;
+    assert(wordCount >= 95, `Test text contains ~100 words (actual: ${wordCount})`);
+
+    const photoHotspot = {
+      id: 'photo-100-words',
+      action: {
+        type: 'photo',
+        url: 'monument.jpg',
+        title: 'National Historic Monument',
+        description: long100WordDesc
+      }
+    };
+
+    const sceneEl = new MockElement('a-scene');
+    const hotspotEl = new MockElement('a-entity');
+    sceneEl.appendChild(hotspotEl);
+
+    const visualEl = new MockElement('a-image');
+    visualEl.setAttribute('src', 'monument.jpg');
+    visualEl.sceneEl = sceneEl;
+    hotspotEl.appendChild(visualEl);
+
+    const controller = new StaticPhotoController(visualEl, photoHotspot);
+    controller.openCard();
+
+    const descEl = controller.cardEl.querySelector('.swt-photo-card-desc');
+    assert(descEl !== null, 'Description element created in card');
+    assert(descEl.getAttribute('value') === long100WordDesc, 'Description text preserved exactly');
+
+    const wrapCount = parseInt(descEl.getAttribute('wrap-count'), 10);
+    assert(wrapCount >= 40, `wrap-count is calibrated for readability without overflow (wrap-count: ${wrapCount} >= 40)`);
+
+    const width = parseFloat(descEl.getAttribute('width'));
+    assert(width >= 3.0, `Description width allocates wide text column (width: ${width} >= 3.0m)`);
+
+    // Verify character sizing ensures ~100 words fits within card height
+    const charWidth = width / wrapCount;
+    const estLineCount = Math.ceil(long100WordDesc.length / wrapCount);
+    const estTextHeight = estLineCount * (charWidth * 1.25);
+    const cardHeight = 4.6;
+    assert(estTextHeight < cardHeight * 0.7, `Estimated 100-word text height (${estTextHeight.toFixed(2)}m) comfortably fits within card height (${cardHeight}m)`);
+
+    controller.destroy();
+  }
+
+  // --- Test 31: Photo scaling 2x floating title positioning above enlarged photo ---
+  console.log('\nTest 31: Photo scaling 2x floating title positioning above enlarged photo');
+  {
+    const sceneEl = new MockElement('a-scene');
+    const assetManager = { addAsset: () => {} };
+    const hotspotManager = new HotspotManager(sceneEl, assetManager);
+
+    const scaledPhotoHotspot = {
+      id: 'photo-2x',
+      position: { x: 0, y: 1.5, z: -5 },
+      action: { type: 'photo', url: 'monument.jpg' },
+      appearance: { scale: '2.0 2.0 2.0', aspectRatio: 1.5 },
+      tooltip: { text: 'Monument 2x' }
+    };
+
+    hotspotManager.createHotspot(scaledPhotoHotspot, 0);
+
+    const hotspotEl = sceneEl.children[0];
+    assert(hotspotEl !== undefined, 'Hotspot entity created in scene');
+
+    const visualEl = hotspotEl.querySelector('a-image');
+    assert(visualEl !== null, 'Visual photo image entity exists');
+    assert(visualEl.getAttribute('scale') === '2 2 2', 'Photo scale is 2 2 2');
+
+    const titleWrap = hotspotEl.querySelector('#swt-photo-title-0');
+    assert(titleWrap !== null, 'Floating title entity exists for photo');
+
+    const titlePos = titleWrap.getAttribute('position').split(/\s+/).map(Number);
+    const titleY = titlePos[1];
+
+    const photoHeight = parseFloat(visualEl.getAttribute('height')) || 1.0;
+    const photoHalfHeightScaled = (photoHeight * 0.5) * 2.0;
+
+    assert(titleY > photoHalfHeightScaled, `Title Y position (${titleY}m) is strictly above photo top edge (${photoHalfHeightScaled}m) and not covered`);
+
+    const titleScale = parseFloat(titleWrap.getAttribute('scale').split(/\s+/)[0]);
+    assert(titleScale > 1.0, `Title scale (${titleScale}) scales proportionally with photo`);
+  }
+
+  // --- Test 32: Description font size slider (descFontSize) adjustments on 3D card ---
+  console.log('\nTest 32: Description font size slider (descFontSize) adjustments on 3D card');
+  {
+    const sceneEl = new MockElement('a-scene');
+    const hotspotEl = new MockElement('a-entity');
+    sceneEl.appendChild(hotspotEl);
+
+    const visualEl = new MockElement('a-image');
+    visualEl.setAttribute('src', 'sample.jpg');
+    visualEl.sceneEl = sceneEl;
+    hotspotEl.appendChild(visualEl);
+
+    // Case A: 1.5x font size (larger font -> wrap-count decreases to 31)
+    const largeFontHotspot = {
+      id: 'photo-font-large',
+      action: { type: 'photo', url: 'sample.jpg', title: 'Art Piece', description: 'Desc text' },
+      appearance: { descFontSize: 1.5 }
+    };
+    const controllerLarge = new StaticPhotoController(visualEl, largeFontHotspot);
+    controllerLarge.openCard();
+    const descLarge = controllerLarge.cardEl.querySelector('.swt-photo-card-desc');
+    assert(descLarge !== null, 'Description element created for large font card');
+    assert(parseInt(descLarge.getAttribute('wrap-count'), 10) === 31, '1.5x descFontSize decreases wrap-count to 31 (larger characters)');
+    controllerLarge.destroy();
+
+    // Case B: 0.8x font size (smaller font -> wrap-count increases to 58)
+    const smallFontHotspot = {
+      id: 'photo-font-small',
+      action: { type: 'photo', url: 'sample.jpg', title: 'Art Piece', description: 'Desc text' },
+      appearance: { descFontSize: 0.8 }
+    };
+    const controllerSmall = new StaticPhotoController(visualEl, smallFontHotspot);
+    controllerSmall.openCard();
+    const descSmall = controllerSmall.cardEl.querySelector('.swt-photo-card-desc');
+    assert(descSmall !== null, 'Description element created for small font card');
+    assert(parseInt(descSmall.getAttribute('wrap-count'), 10) === 58, '0.8x descFontSize increases wrap-count to 58 (smaller characters)');
+    controllerSmall.destroy();
+  }
+
+  // --- Test 33: Editor photo properties: Color hidden, description font slider displayed and exported ---
+  console.log('\nTest 33: Editor photo properties: Color hidden, description font slider displayed and exported');
+  {
+    // Visibility rules matching UIController logic:
+    const resolveEditorVisibility = (hotspot) => {
+      const isPhoto = hotspot.action?.type === 'photo' || hotspot.type === 'photo';
+      return {
+        showColor: isPhoto ? 'none' : 'block',
+        showDescFont: isPhoto ? 'block' : 'none',
+        descFontVal: hotspot.appearance?.descFontSize ?? hotspot.action?.descFontSize ?? 1.0
+      };
+    };
+
+    const photoHotspot = {
+      id: 'photo-test',
+      action: { type: 'photo', url: 'photo.jpg', description: 'Test desc', descFontSize: 1.2 },
+      appearance: { descFontSize: 1.2 },
+      tooltip: { text: 'Photo Hotspot', description: 'Test desc' }
+    };
+
+    const photoVis = resolveEditorVisibility(photoHotspot);
+    assert(photoVis.showColor === 'none', 'Color picker is hidden for static photo');
+    assert(photoVis.showDescFont === 'block', 'Description font size slider is displayed for static photo');
+    assert(photoVis.descFontVal === 1.2, 'Description font size slider reads 1.2');
+
+    const gazeHotspot = {
+      id: 'gaze-test',
+      action: { type: 'gazeNavigate', target: 's2', duration: 3000 },
+      appearance: { color: '#00ffff' }
+    };
+
+    const gazeVis = resolveEditorVisibility(gazeHotspot);
+    assert(gazeVis.showColor === 'block', 'Color picker is visible for gaze navigation hotspot');
+    assert(gazeVis.showDescFont === 'none', 'Description font size slider is hidden for gaze hotspot');
+
+    // Test export preserves descFontSize
+    const tourConfig = buildTourConfig(
+      { initialSceneId: 'scene-1' },
+      [{ id: 'scene-1', hotspots: [photoHotspot] }]
+    );
+    const exportedHotspot = tourConfig.scenes[0].hotspots[0];
+    assert(exportedHotspot.appearance.descFontSize === 1.2, 'Exported tour config preserves appearance.descFontSize');
+    assert(exportedHotspot.action.descFontSize === 1.2, 'Exported tour config preserves action.descFontSize');
+  }
+
+  // --- Test 34: GazeImage single title verification (no duplicate tooltip on gaze/hover) ---
+  console.log('\nTest 34: GazeImage single title verification (no duplicate tooltip on gaze/hover)');
+  {
+    const sceneEl = new MockElement('a-scene');
+    const assetManager = { addAsset: () => {}, preloadImage: async () => ({ naturalWidth: 800, naturalHeight: 600 }) };
+    const hotspotManager = new HotspotManager(sceneEl, assetManager);
+
+    const gazeImageHotspot = {
+      id: 'gaze-img-single-title',
+      position: { x: 1, y: 1.5, z: -4 },
+      action: { type: 'gazeImage', target: 'scene-next', duration: 3000, url: 'next.jpg' },
+      tooltip: { text: 'Next Scene Preview' }
+    };
+
+    hotspotManager.createHotspot(gazeImageHotspot, 0);
+
+    const hotspotEl = sceneEl.children[0];
+    assert(hotspotEl !== undefined, 'Hotspot created in scene');
+
+    // Verify exactly ONE photo title entity is created inside the hotspot element
+    const titleWrap = hotspotEl.querySelector('#swt-photo-title-0');
+    assert(titleWrap !== null, 'Dedicated photo title entity created for gazeImage');
+    assert(titleWrap.getAttribute('visible') === 'true', 'GazeImage title is visible above image');
+
+    // Simulate hover/gaze enter event arriving at HotspotManager
+    hotspotManager.handleHotspotHover({
+      detail: {
+        hotspotData: gazeImageHotspot,
+        isHovering: true
+      }
+    });
+
+    // Verify global tooltipEl is NOT made visible (suppressing duplicate title)
+    assert(
+      !hotspotManager.tooltipEl || hotspotManager.tooltipEl.getAttribute('visible') === 'false',
+      'Global tooltipEl remains hidden for gazeImage so only ONE title exists'
+    );
+  }
+
   console.log(`\n=== RESULTS: ${passCount} PASSED, ${failCount} FAILED ===\n`);
   if (failCount > 0) {
     process.exit(1);

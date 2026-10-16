@@ -589,6 +589,25 @@ class PreviewController {
         }
       }
 
+      // Update photo floating title position and scale in-place if photo title entity exists
+      const photoTitleWrap = activeHotspotEl.querySelector('[id^="swt-photo-title"]');
+      if (photoTitleWrap) {
+        const rawScale = hotspot.appearance?.scale;
+        let scaleFactor = 1;
+        if (typeof rawScale === 'number' && isFinite(rawScale)) {
+          scaleFactor = rawScale;
+        } else if (typeof rawScale === 'string') {
+          const firstPart = parseFloat(rawScale.trim().split(/\s+/)[0]);
+          if (isFinite(firstPart) && firstPart > 0) scaleFactor = firstPart;
+        }
+        const photoImg = activeHotspotEl.querySelector('a-image');
+        const h = photoImg ? (parseFloat(photoImg.getAttribute('height')) || 1.5) : 1.5;
+        const titleScale = Math.min(Math.max(scaleFactor * 0.85, 0.75), 2.5);
+        photoTitleWrap.setAttribute('scale', `${titleScale} ${titleScale} ${titleScale}`);
+        const titleY = (h * 0.5 * scaleFactor) + (0.32 * titleScale);
+        photoTitleWrap.setAttribute('position', `0 ${titleY.toFixed(3)} 0.02`);
+      }
+
       // Update tooltip position and scale in-place if tooltip is currently visible
       const tooltipEl = this.tour.hotspotManager?.tooltipEl;
       if (tooltipEl && tooltipEl.getAttribute('visible') === 'true') {

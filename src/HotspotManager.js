@@ -60,6 +60,22 @@ export class HotspotManager {
     const detail = evt && evt.detail ? evt.detail : {};
     const hotspotData = detail.hotspotData;
 
+    // Image-based hotspots (photo, gazeImage) manage their own dedicated title element; suppress duplicate generic tooltip
+    const isImageHotspot =
+      hotspotData?.action?.type === 'photo' ||
+      hotspotData?.action?.type === 'image' ||
+      hotspotData?.action?.type === 'gazeImage' ||
+      hotspotData?.type === 'photo' ||
+      hotspotData?.type === 'image' ||
+      hotspotData?.type === 'gazeImage';
+
+    if (isImageHotspot) {
+      if (this.tooltipEl) {
+        this.tooltipEl.setAttribute('visible', 'false');
+      }
+      return;
+    }
+
     if (detail.isHovering && hotspotData && hotspotData.tooltip) {
       if (!this.tooltipEl) {
         this.createTooltip();
@@ -260,14 +276,26 @@ export class HotspotManager {
         visualEl.setAttribute('width', w.toFixed(3));
         visualEl.setAttribute('height', h.toFixed(3));
 
+        const rawScale = hotspot.appearance?.scale ?? this.defaultSettings.scale;
+        let scaleFactor = 1.0;
+        if (typeof rawScale === 'number' && isFinite(rawScale)) {
+          scaleFactor = rawScale;
+        } else if (typeof rawScale === 'string') {
+          const p = parseFloat(rawScale.trim().split(/\s+/)[0]);
+          if (isFinite(p) && p > 0) scaleFactor = p;
+        }
+
         // Title above photo/image:
         // - For gazeImage: title is ALWAYS visible (visible="true")
         // - For staticPhoto: title appears ONLY on focus (visible="false" initially, shown on focus by swt-static-photo)
+        // Position and scale account for the photo scale factor so title is never covered even at 2x+ scale
         const title = hotspot.tooltip?.text || hotspot.title || hotspot.name || '';
         if (title) {
           titleWrap = document.createElement('a-entity');
           titleWrap.setAttribute('id', `swt-photo-title-${index}`);
-          const titleY = (h * 0.5) + 0.32;
+          const titleScale = Math.min(Math.max(scaleFactor * 0.85, 0.75), 2.5);
+          titleWrap.setAttribute('scale', `${titleScale} ${titleScale} ${titleScale}`);
+          const titleY = (h * 0.5 * scaleFactor) + (0.32 * titleScale);
           titleWrap.setAttribute('position', `0 ${titleY.toFixed(3)} 0.02`);
           titleWrap.setAttribute('swt-billboard', 'enabled: true');
 
@@ -317,8 +345,10 @@ export class HotspotManager {
               hotspot.appearance.aspectRatio = loadedAspect;
 
               if (titleWrap) {
-                const updatedY = (th * 0.5) + 0.32;
+                const titleScale = Math.min(Math.max(scaleFactor * 0.85, 0.75), 2.5);
+                const updatedY = (th * 0.5 * scaleFactor) + (0.32 * titleScale);
                 titleWrap.setAttribute('position', `0 ${updatedY.toFixed(3)} 0.02`);
+                titleWrap.setAttribute('scale', `${titleScale} ${titleScale} ${titleScale}`);
               }
             }
           }
@@ -362,11 +392,12 @@ export class HotspotManager {
         hotspotEl.appendChild(gazeRing);
       }
     } else if (isStaticPhoto) {
-      // Static photos: title appears ONLY when focused by cursor/reticle
+      // Static photos: title appears on focus, and gaze focus opens 3D card
       visualEl.setAttribute('class', 'clickable');
       visualEl.setAttribute('swt-static-photo', {
         titleId: `swt-photo-title-${index}`,
-        hotspotData: JSON.stringify(hotspot)
+        hotspotData: JSON.stringify(hotspot),
+        isEditor: isEditor
       });
     } else if (isEditor) {
       visualEl.setAttribute('class', 'clickable');

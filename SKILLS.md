@@ -81,12 +81,12 @@ ExportManager           // export to JSON or standalone HTML
 ## Focus Areas
 
 - A-Frame scene management: panorama spheres, camera rig, hotspot entities
-- Visual editor: click-to-place hotspots on 360 panoramas, drag to reposition, `🎯 Punta` button
+- Visual editor: click-to-place hotspots on 360 panoramas, drag to reposition, `🎯 Focus` button
 - Gaze navigation: hands-free VR navigation with circular countdown ring and configurable timer
-- Static photo hotspots: 3D photo planes preserving native aspect ratio with full-screen modal view
+- Static photo hotspots: 3D photo planes preserving native aspect ratio with hands-free in-scene 3D card view (photo on left, title & description on right, 2s gaze close on 'X')
 - Hotspot resizing: live slider scaling with automatic proportional billboard tooltip adaptation
 - Lightweight viewer: standalone HTML export with baked icon SVG data URLs
-- Hotspot interactions: navigate between scenes, gaze countdown, open photo modals
+- Hotspot interactions: navigate between scenes, gaze countdown, in-scene photo cards with 2s gaze close
 - Mobile and VR-ready: touch, mouse, Cardboard, Oculus, WebXR
 - JSON export/import for project portability
 - High performance: `refreshHotspots()` DOM updates without tearing down WebGL or reloading 360 panoramas
@@ -105,6 +105,6 @@ ExportManager           // export to JSON or standalone HTML
 
 ```bash
 npm run build                      # rollup build
-node tests/test-gaze-navigation.js  # 49 unit tests covering gaze, photo, scale, export
+node tests/test-gaze-navigation.js  # 95 unit tests covering gaze, photo cards, scale, export
 npm run serve                      # http-server on port 8080/8089 for manual testing
 ```

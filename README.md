@@ -37,7 +37,7 @@ A powerful, data-driven 360° virtual tour system built on A-Frame WebVR. Create
 - **Mobile & VR Headset Ready** - Designed for VR headsets with phone inside (hands-free reticle gaze interaction, no screen touches needed)
 - **Gaze Navigation Hotspots** - Automatic navigation upon holding gaze on an icon hotspot with animated circular countdown ring
 - **Gaze Image Hotspots** - Immersive navigation hotspots displaying a custom photo that zooms in over the gaze duration to fill the view, transitioning into the next scene
-- **Static 3D Photos** - Non-clickable photos placed in 3D space with their title displayed directly above, maintaining native aspect ratio
+- **Static 3D Photos & In-Scene Cards** - Photos placed in 3D space with native aspect ratio; hands-free VR "In grande" 3D card view (photo on left, title & description on right, close 'X' with 2-second gaze countdown)
 - **Dynamic Hotspot Scaling** - Scale hotspots and photos with proportional title position and dimension adjustment
 - **Customizable Hotspots** - Custom icons, colors, scales, and title text
 - **Multiple Export Formats** - JSON configuration or standalone HTML files
@@ -600,17 +600,17 @@ setTimeout(() => {
 - **Click-to-Place Hotspots** - Raycast-based placement on panorama sphere
 - **Real-Time Preview** - Instant A-Frame rendering as you edit
 - **Scene Management** - Add, remove, reorder scenes with thumbnails
-- **Precise Camera Pointing (`🎯 Punta`)** - Smoothly orient the view directly to any selected hotspot in 3D space
+- **Precise Camera Pointing (`🎯 Focus`)** - Smoothly orient the view directly to any selected hotspot in 3D space
 - **Smart Deselection** - Deselect hotspots by clicking empty sky or toggling the sidebar list item
 - **Protected Editor Mode** - Gaze countdowns and automatic navigation are safely deactivated in editor preview to prevent accidental scene changes while authoring
-- **Manual "Vai" Navigation** - Explicit `➔ Vai` button in the sidebar to test scene transitions on demand
+- **Manual "Go" Navigation** - Explicit `➔ Go` button in the sidebar to test scene transitions on demand
 
 ### Hotspot Configuration & Types
 
 - **Three Action Types:**
   - **Classic Navigation (`navigateTo`)** - Standard click/tap navigation to target scenes
   - **Gaze Navigation (`gazeNavigate`)** - Hands-free VR navigation with customizable countdown timer (default: 3000ms) and animated circular countdown ring
-  - **Static Photo (`photo`)** - Embed photos in 3D space with native aspect ratio (16:9, 4:3, 9:16 portrait, etc.) and full-screen accessible modal viewer
+  - **Static Photo (`photo`)** - Embed photos in 3D space with native aspect ratio (16:9, 4:3, 9:16 portrait, etc.). Hands-free VR navigation: gazing for 2 seconds (or clicking) opens an enlarged 3D Card (photo on left, title & description on right). Gazing at the top-right 'X' icon for 2 seconds closes the card and restores the original photo to its initial state.
 - **Photo Upload & Optimization** - Dual-resolution processing: 512px lightweight thumbnail for 3D billboard quad and up to 1920px HD data URL for modal view
 - **Dynamic Scale Controls** - Live slider (0.1x to 5.0x) and numeric input with automatic proportional tooltip scaling and height offset
 - **3D Position** - Click-to-place or manual X/Y/Z coordinate input (radius clamped to 5 units)

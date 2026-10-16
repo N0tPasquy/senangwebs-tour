@@ -269,7 +269,7 @@ const gazeHotspot = {
     icon: "arrow",
   },
   tooltip: {
-    text: "Fissa lo sguardo per esplorare il Giardino",
+    text: "Focus gaze to explore the Garden",
   },
 };
 editor.addHotspot(gazeHotspot);
@@ -292,14 +292,25 @@ const gazeImageHotspot = {
     aspectRatio: 1.778, // Native aspect ratio
   },
   tooltip: {
-    text: "Verso il Giardino",
+    text: "Towards the Garden",
   },
 };
 editor.addHotspot(gazeImageHotspot);
 ```
 
 #### 3. Static Photo (`photo`)
-Embeds non-clickable photos in 3D space respecting their original aspect ratio, with the title displayed directly above the image in 3D. Non-interactive in VR viewer (no description, no modal).
+Embeds photos in 3D space respecting their original aspect ratio. Designed for hands-free VR headset viewing without touch/mouse:
+- **Enlarged 3D View**: Gazing at the photo for 2 seconds (or clicking) opens an enlarged in-scene 3D Card in place of the original photo.
+- **Card Layout**:
+  ```
+  |-----------------------------X
+  |               | Photo title |
+  |Original photo |             |
+  |               | Description |
+  |-----------------------------|
+  ```
+- **Hands-Free Close**: Holding gaze focus on the top-right 'X' icon for 2 seconds (or clicking it) closes the card and restores the original photo *to its initial state*. Looking away before 2 seconds cancels the close countdown.
+
 ```javascript
 const photoHotspot = {
   id: "hotspot-photo-1",
@@ -307,13 +318,16 @@ const photoHotspot = {
   action: {
     type: "photo",
     url: "https://example.com/artwork-hd.jpg",
+    title: "Renaissance Painting",
+    description: "Masterpiece on canvas displayed in the central gallery."
   },
   appearance: {
     scale: 1.8,
     aspectRatio: 1.778, // Preserves 16:9 native aspect ratio in 3D
   },
   tooltip: {
-    text: "Dipinto Rinascimentale", // Displayed floating directly above the image in 3D
+    text: "Renaissance Painting",
+    description: "Masterpiece on canvas displayed in the central gallery."
   },
 };
 editor.addHotspot(photoHotspot);

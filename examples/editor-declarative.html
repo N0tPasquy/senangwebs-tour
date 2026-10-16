@@ -147,8 +147,8 @@
                     Hotspot Properties
                   </h3>
                   <div style="display: flex; gap: 6px;">
-                    <button type="button" class="btn btn-secondary btn-sm" id="pointCameraToHotspotBtn" title="Inquadra l'hotspot nella vista" style="font-size: 11px; padding: 3px 8px;">🎯 Punta</button>
-                    <button type="button" class="btn btn-secondary btn-sm" id="closeHotspotPropertiesBtn" title="Deseleziona hotspot" style="font-size: 11px; padding: 3px 8px;">✕</button>
+                    <button type="button" class="btn btn-secondary btn-sm" id="pointCameraToHotspotBtn" title="Focus hotspot in view" style="font-size: 11px; padding: 3px 8px;">🎯 Focus</button>
+                    <button type="button" class="btn btn-secondary btn-sm" id="closeHotspotPropertiesBtn" title="Deselect hotspot" style="font-size: 11px; padding: 3px 8px;">✕</button>
                   </div>
                 </div>
 
@@ -162,7 +162,7 @@
                   />
                 </div>
 
-                <div class="form-group">
+                <div class="form-group" id="hotspotDescriptionGroup" style="display: none;">
                   <label class="form-label">Description</label>
                   <textarea
                     id="hotspotDescription"
@@ -171,22 +171,34 @@
                   ></textarea>
                 </div>
 
+                <div class="form-group" id="hotspotDescFontGroup" style="display: none;">
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                    <label class="form-label" style="margin: 0;">Description Font Size</label>
+                    <span id="hotspotDescFontVal" style="font-size: 12px; font-weight: 600; color: var(--accent);">1.0x</span>
+                  </div>
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <input type="range" id="hotspotDescFont" min="0.5" max="2.0" step="0.1" value="1.0" style="flex: 1;" />
+                    <input type="number" id="hotspotDescFontNum" class="form-input" min="0.5" max="3.0" step="0.1" value="1.0"
+                      style="width: 70px; text-align: center; padding: 4px;" />
+                  </div>
+                </div>
+
                 <div class="form-group" id="hotspotTargetGroup">
                   <label class="form-label">Target Scene</label>
                   <div style="display: flex; gap: 8px;">
                     <select id="hotspotTarget" class="form-select" style="flex: 1;">
                       <option value="">Select target scene...</option>
                     </select>
-                    <button type="button" class="btn btn-secondary" id="hotspotGoToSceneBtn" title="Vai alla scena di destinazione" style="flex: 0 0 auto; white-space: nowrap; display: none;">➔ Vai</button>
+                    <button type="button" class="btn btn-secondary" id="hotspotGoToSceneBtn" title="Go to target scene" style="flex: 0 0 auto; white-space: nowrap; display: none;">➔ Go</button>
                   </div>
                 </div>
 
                 <div class="form-group">
                   <label class="form-label">Interaction Type</label>
                   <select id="hotspotActionType" class="form-select">
-                    <option value="navigateTo">Standard (Click / Touch - Navigazione)</option>
-                    <option value="gazeNavigate">Gaze Navigation (Timer - Navigazione)</option>
-                    <option value="photo">Foto statica (Visualizza foto)</option>
+                    <option value="navigateTo">Standard (Click / Touch - Navigation)</option>
+                    <option value="gazeNavigate">Gaze Navigation (Timer - Navigation)</option>
+                    <option value="photo">Static Photo (View photo)</option>
                   </select>
                 </div>
 
@@ -205,27 +217,27 @@
                 </div>
 
                 <div class="form-group" id="hotspotPhotoGroup" style="display: none;">
-                  <label class="form-label">Foto Statica (PNG, JPEG, WebP)</label>
+                  <label class="form-label">Static Photo (PNG, JPEG, WebP)</label>
                   <input type="file" id="hotspotPhotoFile" accept="image/png, image/jpeg, image/webp" style="display: none;" />
                   <button type="button" class="btn btn-secondary" id="hotspotUploadPhotoBtn" style="width: 100%; margin-bottom: 8px;">
-                    📁 Carica foto dal PC
+                    📁 Upload photo from PC
                   </button>
                   <input
                     type="text"
                     id="hotspotPhotoUrl"
                     class="form-input"
-                    placeholder="https://... o incolla URL"
+                    placeholder="https://... or paste URL"
                     style="margin-bottom: 8px;"
                   />
                   <div id="hotspotPhotoPreviewWrap" style="display: none; text-align: center; background: rgba(0,0,0,0.2); padding: 8px; border-radius: 6px;">
-                    <img id="hotspotPhotoPreview" src="" alt="Anteprima" style="max-width: 100%; max-height: 120px; object-fit: contain; border-radius: 4px; display: block; margin: 0 auto 6px auto;" />
+                    <img id="hotspotPhotoPreview" src="" alt="Preview" style="max-width: 100%; max-height: 120px; object-fit: contain; border-radius: 4px; display: block; margin: 0 auto 6px auto;" />
                     <button type="button" class="btn btn-secondary btn-sm" id="hotspotPreviewPhotoBtn" style="width: 100%; font-size: 11px;">
-                      🔍 Visualizza in grande
+                      🔍 View enlarged
                     </button>
                   </div>
                 </div>
 
-                <div class="form-group">
+                <div class="form-group" id="hotspotColorGroup">
                   <label class="form-label">Color</label>
                   <div class="color-picker-group">
                     <input
@@ -260,7 +272,7 @@
 
                 <div class="form-group" id="hotspotScaleGroup">
                   <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                    <label class="form-label" style="margin: 0;">Dimensione / Scala</label>
+                    <label class="form-label" style="margin: 0;">Size / Scale</label>
                     <span id="hotspotScaleVal" style="font-size: 12px; font-weight: 600; color: var(--accent);">1.0x</span>
                   </div>
                   <div style="display: flex; align-items: center; gap: 8px;">

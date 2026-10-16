@@ -258,14 +258,14 @@ class UIController {
     } else if (isPhoto) {
       const badge = document.createElement("span");
       badge.className = "hotspot-badge badge-photo";
-      badge.textContent = "Foto";
+      badge.textContent = "Photo";
       titleEl.appendChild(badge);
     }
 
     const target = document.createElement("div");
     target.className = "hotspot-target";
     if (isPhoto) {
-      target.textContent = "📷 Foto statica";
+      target.textContent = "📷 Static Photo";
     } else if (targetSceneId) {
       const targetScene = this.editor.sceneManager.getSceneById(
         targetSceneId
@@ -429,6 +429,14 @@ class UIController {
       if (iconGroup) iconGroup.style.display = "block";
       const descGroup = this.getEl("hotspotDescriptionGroup");
       if (descGroup) descGroup.style.display = "none";
+      const descFontGroup = this.getEl("hotspotDescFontGroup");
+      if (descFontGroup) descFontGroup.style.display = "none";
+      const descFontSlider = this.getEl("hotspotDescFont");
+      if (descFontSlider) descFontSlider.value = "1.0";
+      const descFontNum = this.getEl("hotspotDescFontNum");
+      if (descFontNum) descFontNum.value = "1.0";
+      const descFontVal = this.getEl("hotspotDescFontVal");
+      if (descFontVal) descFontVal.textContent = "1.0x";
       const scaleSlider = this.getEl("hotspotScale");
       if (scaleSlider) scaleSlider.value = "1.0";
       const scaleNum = this.getEl("hotspotScaleNum");
@@ -518,10 +526,28 @@ class UIController {
       iconGroup.style.display = isGazeIcon ? "block" : "none";
     }
 
+    const colorGroup = this.getEl("hotspotColorGroup") || this.getEl("hotspotColor")?.closest(".form-group");
+    if (colorGroup) {
+      colorGroup.style.display = isPhoto ? "none" : "block";
+    }
+
     const descGroup = this.getEl("hotspotDescriptionGroup");
     if (descGroup) {
-      descGroup.style.display = "none";
+      descGroup.style.display = isPhoto ? "block" : "none";
     }
+
+    const descFontGroup = this.getEl("hotspotDescFontGroup");
+    if (descFontGroup) {
+      descFontGroup.style.display = isPhoto ? "block" : "none";
+    }
+    const rawDescFont = hotspot.appearance?.descFontSize ?? hotspot.action?.descFontSize ?? 1.0;
+    const descFontVal = typeof rawDescFont === 'number' && isFinite(rawDescFont) ? rawDescFont : (parseFloat(rawDescFont) || 1.0);
+    const descFontSlider = this.getEl("hotspotDescFont");
+    if (descFontSlider) descFontSlider.value = descFontVal;
+    const descFontNum = this.getEl("hotspotDescFontNum");
+    if (descFontNum) descFontNum.value = descFontVal;
+    const descFontValText = this.getEl("hotspotDescFontVal");
+    if (descFontValText) descFontValText.textContent = descFontVal.toFixed(1) + "x";
 
     // Scale controls
     const rawScale = hotspot.appearance?.scale;
@@ -543,8 +569,8 @@ class UIController {
     const photoUrl = hotspot.action?.url || hotspot.appearance?.icon || "";
     if (photoUrlInput) {
       if (photoUrl.startsWith("data:")) {
-        photoUrlInput.value = "[Foto caricata]";
-        photoUrlInput.setAttribute("title", "Foto caricata dal computer");
+        photoUrlInput.value = "[Photo uploaded]";
+        photoUrlInput.setAttribute("title", "Photo uploaded from computer");
       } else {
         photoUrlInput.value = photoUrl;
         photoUrlInput.removeAttribute("title");

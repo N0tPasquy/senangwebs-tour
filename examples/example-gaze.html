@@ -214,16 +214,16 @@
       <div class="hud-card" id="hudCard">
         <div class="hud-header">
           <span class="hud-title">Gaze Navigation Demo</span>
-          <button class="hud-close-btn" type="button" onclick="toggleHud()" aria-label="Chiudi">✕</button>
+          <button class="hud-close-btn" type="button" onclick="toggleHud()" aria-label="Close">✕</button>
         </div>
         <p>
-          <span class="badge badge-gaze">Gaze (Blu)</span> Mantieni lo sguardo con il mirino centrale per 3s.
+          <span class="badge badge-gaze">Gaze (Blue)</span> Keep gaze with the central reticle for 3s.
         </p>
         <p>
-          <span class="badge badge-std">Standard (Verde)</span> <strong>Tocca direttamente il riquadro con il dito</strong> (o click mouse) da qualsiasi punto dello schermo, oppure inquadralo e fai tap.
+          <span class="badge badge-std">Standard (Green)</span> <strong>Tap the box directly with your finger</strong> (or mouse click) from anywhere on the screen, or aim and tap.
         </p>
         <div id="event-log">
-          <div class="log-item">Pronto. Tocca l'hotspot o mantieni lo sguardo.</div>
+          <div class="log-item">Ready. Tap the hotspot or maintain gaze.</div>
         </div>
       </div>
     </div>
@@ -330,19 +330,19 @@
           const sceneName = e.detail.sceneId === "scene1" ? "Room 1" : "Room 2";
           const pillLabel = document.getElementById("pill-scene-name");
           if (pillLabel) pillLabel.textContent = sceneName;
-          log(`Scena caricata: ${e.detail.sceneId}`);
+          log(`Scene loaded: ${e.detail.sceneId}`);
         });
 
         tour.addEventListener("hotspot-activated", (e) => {
-          log(`Click su standard: ${e.detail.hotspotData?.id}`);
+          log(`Click on standard: ${e.detail.hotspotData?.id}`);
         });
 
         tour.addEventListener("gaze-activated", (e) => {
-          log(`Gaze completato su: ${e.detail.hotspotData?.id}`);
+          log(`Gaze completed on: ${e.detail.hotspotData?.id}`);
         });
 
         tour.start().then(() => {
-          log("Tour avviato con successo");
+          log("Tour started successfully");
         });
       });
     </script>

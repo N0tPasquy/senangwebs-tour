@@ -2055,6 +2055,25 @@
             }
           }
 
+          // Update photo floating title position and scale in-place if photo title entity exists
+          const photoTitleWrap = activeHotspotEl.querySelector('[id^="swt-photo-title"]');
+          if (photoTitleWrap) {
+            const rawScale = hotspot.appearance?.scale;
+            let scaleFactor = 1;
+            if (typeof rawScale === 'number' && isFinite(rawScale)) {
+              scaleFactor = rawScale;
+            } else if (typeof rawScale === 'string') {
+              const firstPart = parseFloat(rawScale.trim().split(/\s+/)[0]);
+              if (isFinite(firstPart) && firstPart > 0) scaleFactor = firstPart;
+            }
+            const photoImg = activeHotspotEl.querySelector('a-image');
+            const h = photoImg ? (parseFloat(photoImg.getAttribute('height')) || 1.5) : 1.5;
+            const titleScale = Math.min(Math.max(scaleFactor * 0.85, 0.75), 2.5);
+            photoTitleWrap.setAttribute('scale', `${titleScale} ${titleScale} ${titleScale}`);
+            const titleY = (h * 0.5 * scaleFactor) + (0.32 * titleScale);
+            photoTitleWrap.setAttribute('position', `0 ${titleY.toFixed(3)} 0.02`);
+          }
+
           // Update tooltip position and scale in-place if tooltip is currently visible
           const tooltipEl = this.tour.hotspotManager?.tooltipEl;
           if (tooltipEl && tooltipEl.getAttribute('visible') === 'true') {
@@ -4938,14 +4957,14 @@
         } else if (isPhoto) {
           const badge = document.createElement("span");
           badge.className = "hotspot-badge badge-photo";
-          badge.textContent = "Foto";
+          badge.textContent = "Photo";
           titleEl.appendChild(badge);
         }
 
         const target = document.createElement("div");
         target.className = "hotspot-target";
         if (isPhoto) {
-          target.textContent = "📷 Foto statica";
+          target.textContent = "📷 Static Photo";
         } else if (targetSceneId) {
           const targetScene = this.editor.sceneManager.getSceneById(
             targetSceneId
@@ -5109,6 +5128,14 @@
           if (iconGroup) iconGroup.style.display = "block";
           const descGroup = this.getEl("hotspotDescriptionGroup");
           if (descGroup) descGroup.style.display = "none";
+          const descFontGroup = this.getEl("hotspotDescFontGroup");
+          if (descFontGroup) descFontGroup.style.display = "none";
+          const descFontSlider = this.getEl("hotspotDescFont");
+          if (descFontSlider) descFontSlider.value = "1.0";
+          const descFontNum = this.getEl("hotspotDescFontNum");
+          if (descFontNum) descFontNum.value = "1.0";
+          const descFontVal = this.getEl("hotspotDescFontVal");
+          if (descFontVal) descFontVal.textContent = "1.0x";
           const scaleSlider = this.getEl("hotspotScale");
           if (scaleSlider) scaleSlider.value = "1.0";
           const scaleNum = this.getEl("hotspotScaleNum");
@@ -5198,10 +5225,28 @@
           iconGroup.style.display = isGazeIcon ? "block" : "none";
         }
 
+        const colorGroup = this.getEl("hotspotColorGroup") || this.getEl("hotspotColor")?.closest(".form-group");
+        if (colorGroup) {
+          colorGroup.style.display = isPhoto ? "none" : "block";
+        }
+
         const descGroup = this.getEl("hotspotDescriptionGroup");
         if (descGroup) {
-          descGroup.style.display = "none";
+          descGroup.style.display = isPhoto ? "block" : "none";
         }
+
+        const descFontGroup = this.getEl("hotspotDescFontGroup");
+        if (descFontGroup) {
+          descFontGroup.style.display = isPhoto ? "block" : "none";
+        }
+        const rawDescFont = hotspot.appearance?.descFontSize ?? hotspot.action?.descFontSize ?? 1.0;
+        const descFontVal = typeof rawDescFont === 'number' && isFinite(rawDescFont) ? rawDescFont : (parseFloat(rawDescFont) || 1.0);
+        const descFontSlider = this.getEl("hotspotDescFont");
+        if (descFontSlider) descFontSlider.value = descFontVal;
+        const descFontNum = this.getEl("hotspotDescFontNum");
+        if (descFontNum) descFontNum.value = descFontVal;
+        const descFontValText = this.getEl("hotspotDescFontVal");
+        if (descFontValText) descFontValText.textContent = descFontVal.toFixed(1) + "x";
 
         // Scale controls
         const rawScale = hotspot.appearance?.scale;
@@ -5223,8 +5268,8 @@
         const photoUrl = hotspot.action?.url || hotspot.appearance?.icon || "";
         if (photoUrlInput) {
           if (photoUrl.startsWith("data:")) {
-            photoUrlInput.value = "[Foto caricata]";
-            photoUrlInput.setAttribute("title", "Foto caricata dal computer");
+            photoUrlInput.value = "[Photo uploaded]";
+            photoUrlInput.setAttribute("title", "Photo uploaded from computer");
           } else {
             photoUrlInput.value = photoUrl;
             photoUrlInput.removeAttribute("title");
@@ -6023,10 +6068,12 @@
 
             document.getElementById('hotspotTitle')?.addEventListener('input', debounce((e) => {
                 this.updateCurrentHotspot('tooltip.text', e.target.value);
+                this.updateCurrentHotspot('action.title', e.target.value);
             }, 300));
             
             document.getElementById('hotspotDescription')?.addEventListener('input', debounce((e) => {
                 this.updateCurrentHotspot('tooltip.description', e.target.value);
+                this.updateCurrentHotspot('action.description', e.target.value);
             }, 300));
             
             document.getElementById('hotspotTarget')?.addEventListener('change', (e) => {
@@ -6045,7 +6092,7 @@
                     const targetIndex = this.sceneManager.scenes.findIndex(s => s.id === targetSceneId);
                     if (targetIndex >= 0) {
                         this.selectScene(targetIndex);
-                        showToast('Passato alla scena: ' + (this.sceneManager.scenes[targetIndex].name || targetSceneId), 'info');
+                        showToast('Switched to scene: ' + (this.sceneManager.scenes[targetIndex].name || targetSceneId), 'info');
                     }
                 }
             });
@@ -6061,7 +6108,9 @@
                 const gazeGroup = document.getElementById('hotspotGazeDurationGroup');
                 const photoGroup = document.getElementById('hotspotPhotoGroup');
                 const iconGroup = document.getElementById('hotspotIconGroup');
+                const colorGroup = document.getElementById('hotspotColorGroup') || document.getElementById('hotspotColor')?.closest('.form-group');
                 const descGroup = document.getElementById('hotspotDescriptionGroup');
+                const descFontGroup = document.getElementById('hotspotDescFontGroup');
                 
                 if (targetGroup) targetGroup.style.display = isPhoto ? 'none' : 'block';
                 if (goToBtn) {
@@ -6071,7 +6120,9 @@
                 if (gazeGroup) gazeGroup.style.display = isPhoto ? 'none' : 'block';
                 if (photoGroup) photoGroup.style.display = (isPhoto || isGazeImage) ? 'block' : 'none';
                 if (iconGroup) iconGroup.style.display = isGazeIcon ? 'block' : 'none';
-                if (descGroup) descGroup.style.display = 'none';
+                if (colorGroup) colorGroup.style.display = isPhoto ? 'none' : 'block';
+                if (descGroup) descGroup.style.display = isPhoto ? 'block' : 'none';
+                if (descFontGroup) descFontGroup.style.display = isPhoto ? 'block' : 'none';
 
                 await this.updateCurrentHotspot('action.type', actionType);
 
@@ -6103,7 +6154,7 @@
                 const file = e.target.files?.[0];
                 if (file) {
                     try {
-                        showToast('Elaborazione foto...', 'info', 1000);
+                        showToast('Processing photo...', 'info', 1000);
                         // Optimize image: max 1920 for high-res modal view, max 512 for 3D sphere plane
                         const fullDataUrl = await loadImageAsDataUrl(file, { maxDimension: 1920, quality: 0.85 });
                         const thumbDataUrl = await loadImageAsDataUrl(file, { maxDimension: 512, quality: 0.80 });
@@ -6128,7 +6179,7 @@
 
                             const photoUrlInput = document.getElementById('hotspotPhotoUrl');
                             if (photoUrlInput) {
-                                photoUrlInput.value = `[Foto: ${file.name}]`;
+                                photoUrlInput.value = `[Photo: ${file.name}]`;
                                 photoUrlInput.setAttribute('title', file.name);
                             }
 
@@ -6142,18 +6193,18 @@
                             await this.previewController.refreshHotspots();
                             this.uiController.renderHotspotList();
                             this.markUnsavedChanges();
-                            showToast('Foto caricata e ottimizzata con successo', 'success');
+                            showToast('Photo uploaded and optimized successfully', 'success');
                         }
                     } catch (err) {
-                        console.error('Errore nel caricamento foto:', err);
-                        showToast('Errore nel caricamento della foto', 'error');
+                        console.error('Error loading photo:', err);
+                        showToast('Error loading photo', 'error');
                     }
                 }
             });
 
             document.getElementById('hotspotPhotoUrl')?.addEventListener('input', debounce(async (e) => {
                 const url = e.target.value.trim();
-                if (url.startsWith('[Foto:') || url.startsWith('[Foto caricata')) return;
+                if (url.startsWith('[Photo:') || url.startsWith('[Photo uploaded') || url.startsWith('[Foto:') || url.startsWith('[Foto caricata')) return;
                 const curIndex = this.hotspotEditor.currentHotspotIndex;
                 const curHotspot = this.hotspotEditor.getHotspot(curIndex);
                 if (curHotspot) {
@@ -6203,7 +6254,7 @@
                     };
                     this.previewController.tour?.openPhotoModal(actionData);
                 } else {
-                    showToast('Carica o inserisci prima una foto', 'warning');
+                    showToast('Please upload or enter a photo first', 'warning');
                 }
             });
             
@@ -6274,6 +6325,17 @@
                     if (ringEl) {
                         ringEl.setAttribute('scale', `${num} ${num} ${num}`);
                     }
+
+                    // Real-time update of photo floating title position and scale so it stays above the photo
+                    const photoTitleWrap = activeHotspotEl.querySelector(`#swt-photo-title-${curIndex}`) || activeHotspotEl.querySelector('[id^="swt-photo-title"]');
+                    if (photoTitleWrap) {
+                        const photoImg = activeHotspotEl.querySelector('a-image');
+                        const h = photoImg ? (parseFloat(photoImg.getAttribute('height')) || 1.5) : 1.5;
+                        const titleScale = Math.min(Math.max(num * 0.85, 0.75), 2.5);
+                        photoTitleWrap.setAttribute('scale', `${titleScale} ${titleScale} ${titleScale}`);
+                        const titleY = (h * 0.5 * num) + (0.32 * titleScale);
+                        photoTitleWrap.setAttribute('position', `0 ${titleY.toFixed(3)} 0.02`);
+                    }
                 }
 
                 // Real-time update of tooltip title position and scale
@@ -6308,6 +6370,42 @@
                 const num = Math.max(0.1, parseFloat(e.target.value) || 1.0);
                 handleScaleUpdate(num);
                 await this.updateCurrentHotspot('appearance.scale', `${num} ${num} ${num}`);
+            }, 300));
+
+            // Description font size slider handlers for photo hotspots
+            const handleDescFontUpdate = (val) => {
+                const num = Math.min(3.0, Math.max(0.4, parseFloat(val) || 1.0));
+                const slider = document.getElementById('hotspotDescFont');
+                const numInput = document.getElementById('hotspotDescFontNum');
+                const valText = document.getElementById('hotspotDescFontVal');
+                if (slider && parseFloat(slider.value) !== num) slider.value = num;
+                if (numInput && parseFloat(numInput.value) !== num) numInput.value = num;
+                if (valText) valText.textContent = num.toFixed(1) + 'x';
+
+                const curHotspot = this.hotspotEditor.getCurrentHotspot();
+                if (curHotspot) {
+                    if (!curHotspot.appearance) curHotspot.appearance = {};
+                    curHotspot.appearance.descFontSize = num;
+                    if (!curHotspot.action) curHotspot.action = {};
+                    curHotspot.action.descFontSize = num;
+                }
+            };
+
+            document.getElementById('hotspotDescFont')?.addEventListener('input', (e) => {
+                handleDescFontUpdate(e.target.value);
+            });
+
+            document.getElementById('hotspotDescFont')?.addEventListener('change', debounce(async (e) => {
+                const num = Math.min(3.0, Math.max(0.4, parseFloat(e.target.value) || 1.0));
+                await this.updateCurrentHotspot('appearance.descFontSize', num);
+                await this.updateCurrentHotspot('action.descFontSize', num);
+            }, 200));
+
+            document.getElementById('hotspotDescFontNum')?.addEventListener('input', debounce(async (e) => {
+                const num = Math.min(3.0, Math.max(0.4, parseFloat(e.target.value) || 1.0));
+                handleDescFontUpdate(num);
+                await this.updateCurrentHotspot('appearance.descFontSize', num);
+                await this.updateCurrentHotspot('action.descFontSize', num);
             }, 300));
 
             document.getElementById('hotspotPosX')?.addEventListener('input', debounce((e) => {
@@ -6644,7 +6742,7 @@
         async updateCurrentHotspot(property, value) {
             const index = this.hotspotEditor.currentHotspotIndex;
             if (this.hotspotEditor.updateHotspot(index, property, value)) {
-                const contentProps = ['appearance.icon', 'appearance.color', 'action.type', 'action.url', 'action.target', 'tooltip.text', 'tooltip.description'];
+                const contentProps = ['appearance.icon', 'appearance.color', 'appearance.descFontSize', 'action.descFontSize', 'action.type', 'action.url', 'action.target', 'action.title', 'action.description', 'tooltip.text', 'tooltip.description'];
                 if (contentProps.includes(property)) {
                     await this.previewController.refreshHotspots();
                 } else {
