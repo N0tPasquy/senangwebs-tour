@@ -410,13 +410,13 @@ class UIController {
       const posZ = this.getEl("hotspotPosZ");
       if (posZ) posZ.value = "";
       const actionType = this.getEl("hotspotActionType");
-      if (actionType) actionType.value = "navigateTo";
+      if (actionType) actionType.value = "gazeNavigate";
       const targetGroup = this.getEl("hotspotTargetGroup");
       if (targetGroup) targetGroup.style.display = "block";
       const goToBtn = this.getEl("hotspotGoToSceneBtn");
       if (goToBtn) goToBtn.style.display = "none";
       const gazeDurationGroup = this.getEl("hotspotGazeDurationGroup");
-      if (gazeDurationGroup) gazeDurationGroup.style.display = "none";
+      if (gazeDurationGroup) gazeDurationGroup.style.display = "block";
       const gazeDuration = this.getEl("hotspotGazeDuration");
       if (gazeDuration) gazeDuration.value = "3000";
       const photoGroup = this.getEl("hotspotPhotoGroup");
@@ -427,6 +427,8 @@ class UIController {
       if (photoPreviewWrap) photoPreviewWrap.style.display = "none";
       const iconGroup = this.getEl("hotspotIconGroup");
       if (iconGroup) iconGroup.style.display = "block";
+      const descGroup = this.getEl("hotspotDescriptionGroup");
+      if (descGroup) descGroup.style.display = "none";
       const scaleSlider = this.getEl("hotspotScale");
       if (scaleSlider) scaleSlider.value = "1.0";
       const scaleNum = this.getEl("hotspotScaleNum");
@@ -444,7 +446,7 @@ class UIController {
     const title = hotspot.tooltip?.text || "";
     const description = hotspot.tooltip?.description || "";
     const targetSceneId = hotspot.action?.target || "";
-    const color = hotspot.appearance?.color || "#00ff00";
+    const color = hotspot.appearance?.color || "#4CC3D9";
     const icon = hotspot.appearance?.icon || "";
 
     const titleEl = this.getEl("hotspotTitle");
@@ -478,12 +480,13 @@ class UIController {
     this.updateTargetSceneOptions();
 
     // Update Action Type, Target, Photo and Gaze Duration controls
-    const isGaze = hotspot.action?.type === 'gazeNavigate' || hotspot.type === 'gazeNavigate' || hotspot.type === 'gaze';
+    const isGazeImage = hotspot.action?.type === 'gazeImage' || hotspot.type === 'gazeImage';
     const isPhoto = hotspot.action?.type === 'photo' || hotspot.type === 'photo';
+    const isGazeIcon = !isPhoto && !isGazeImage;
 
     const actionTypeEl = this.getEl("hotspotActionType");
     if (actionTypeEl) {
-      actionTypeEl.value = isPhoto ? "photo" : (isGaze ? "gazeNavigate" : "navigateTo");
+      actionTypeEl.value = isPhoto ? "photo" : (isGazeImage ? "gazeImage" : "gazeNavigate");
     }
 
     const targetGroup = this.getEl("hotspotTargetGroup");
@@ -498,7 +501,7 @@ class UIController {
 
     const gazeDurationGroup = this.getEl("hotspotGazeDurationGroup");
     if (gazeDurationGroup) {
-      gazeDurationGroup.style.display = isGaze ? "block" : "none";
+      gazeDurationGroup.style.display = isPhoto ? "none" : "block";
     }
     const gazeDurationEl = this.getEl("hotspotGazeDuration");
     if (gazeDurationEl) {
@@ -507,11 +510,17 @@ class UIController {
 
     const photoGroup = this.getEl("hotspotPhotoGroup");
     if (photoGroup) {
-      photoGroup.style.display = isPhoto ? "block" : "none";
+      photoGroup.style.display = (isPhoto || isGazeImage) ? "block" : "none";
     }
+
     const iconGroup = this.getEl("hotspotIconGroup");
     if (iconGroup) {
-      iconGroup.style.display = isPhoto ? "none" : "block";
+      iconGroup.style.display = isGazeIcon ? "block" : "none";
+    }
+
+    const descGroup = this.getEl("hotspotDescriptionGroup");
+    if (descGroup) {
+      descGroup.style.display = "none";
     }
 
     // Scale controls
@@ -544,7 +553,7 @@ class UIController {
     const photoPreviewWrap = this.getEl("hotspotPhotoPreviewWrap");
     const photoPreview = this.getEl("hotspotPhotoPreview");
     if (photoPreviewWrap && photoPreview) {
-      if (isPhoto && photoUrl) {
+      if ((isPhoto || isGazeImage) && photoUrl) {
         photoPreview.src = photoUrl;
         photoPreviewWrap.style.display = "block";
       } else {

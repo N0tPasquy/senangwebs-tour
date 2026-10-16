@@ -325,6 +325,100 @@ if (typeof AFRAME$1 !== 'undefined') {
   });
 
   /**
+   * Component for static photos in 3D scene.
+   * Shows the floating title ONLY when the element is focused by the reticle/cursor.
+   */
+  AFRAME$1.registerComponent('swt-static-photo', {
+    schema: {
+      titleId: { type: 'string', default: '' },
+      hotspotData: { type: 'string', default: '{}' }
+    },
+
+    init: function () {
+      this.onEnter = this.onEnter.bind(this);
+      this.onLeave = this.onLeave.bind(this);
+      this.onClick = this.onClick.bind(this);
+      this.titleEl = null;
+      this.isFocused = false;
+    },
+
+    play: function () {
+      this.el.addEventListener('mouseenter', this.onEnter);
+      this.el.addEventListener('mouseleave', this.onLeave);
+      this.el.addEventListener('raycaster-intersected', this.onEnter);
+      this.el.addEventListener('raycaster-intersected-cleared', this.onLeave);
+      this.el.addEventListener('click', this.onClick);
+    },
+
+    pause: function () {
+      this.el.removeEventListener('mouseenter', this.onEnter);
+      this.el.removeEventListener('mouseleave', this.onLeave);
+      this.el.removeEventListener('raycaster-intersected', this.onEnter);
+      this.el.removeEventListener('raycaster-intersected-cleared', this.onLeave);
+      this.el.removeEventListener('click', this.onClick);
+      this.handleLeave();
+    },
+
+    remove: function () {
+      this.handleLeave();
+    },
+
+    getTitleEl: function () {
+      if (!this.titleEl && this.data.titleId) {
+        this.titleEl =
+          (this.el.parentNode && this.el.parentNode.querySelector(`#${this.data.titleId}`)) ||
+          (this.el.sceneEl && this.el.sceneEl.querySelector(`#${this.data.titleId}`)) ||
+          (typeof document !== 'undefined' && document.getElementById(this.data.titleId));
+      }
+      return this.titleEl;
+    },
+
+    handleEnter: function () {
+      if (this.isFocused) return;
+      this.isFocused = true;
+      const title = this.getTitleEl();
+      if (title) {
+        title.setAttribute('visible', 'true');
+      }
+    },
+
+    handleLeave: function () {
+      if (!this.isFocused) return;
+      this.isFocused = false;
+      const title = this.getTitleEl();
+      if (title) {
+        title.setAttribute('visible', 'false');
+      }
+    },
+
+    onEnter: function (evt) {
+      const cursorEl = evt?.detail?.cursorEl;
+      if (cursorEl && (cursorEl.id === 'swt-mouse-cursor' || cursorEl.getAttribute?.('cursor')?.rayOrigin === 'mouse')) {
+        return;
+      }
+      this.handleEnter();
+    },
+
+    onLeave: function (evt) {
+      const cursorEl = evt?.detail?.cursorEl;
+      if (cursorEl && (cursorEl.id === 'swt-mouse-cursor' || cursorEl.getAttribute?.('cursor')?.rayOrigin === 'mouse')) {
+        return;
+      }
+      this.handleLeave();
+    },
+
+    onClick: function () {
+      // In editor mode, allow clicking to select the photo in editor panel
+      try {
+        const hotspotData = JSON.parse(this.data.hotspotData);
+        if (this.el.sceneEl) {
+          this.el.sceneEl.emit('swt-hotspot-clicked', { hotspotData });
+        }
+      } catch (e) {}
+    }
+  });
+
+  /**
    * Component for the circular gaze progress indicator around the central reticle/cursor.
    */
   AFRAME$1.registerComponent('swt-gaze-progress', {
@@ -1048,6 +1142,31 @@ class GazeManager {
     this.startTime = performance.now();
     this.hasTriggered = false;
 
+    const isGazeImage = hotspotData?.action?.type === 'gazeImage' || hotspotData?.type === 'gazeImage';
+    if (isGazeImage) {
+      this.currentVisualEl = el.tagName?.toLowerCase() === 'a-image' ? el : (el.querySelector('a-image') || el);
+      const rawScale = this.currentVisualEl?.getAttribute?.('scale');
+      let sx = 1, sy = 1, sz = 1;
+      if (typeof rawScale === 'string') {
+        const parts = rawScale.trim().split(/\s+/).map(Number);
+        if (parts.length > 0 && isFinite(parts[0])) {
+          sx = parts[0];
+          sy = parts[1] ?? sx;
+          sz = parts[2] ?? sx;
+        }
+      } else if (typeof rawScale === 'number' && isFinite(rawScale)) {
+        sx = sy = sz = rawScale;
+      } else if (rawScale && typeof rawScale === 'object') {
+        sx = rawScale.x ?? 1;
+        sy = rawScale.y ?? 1;
+        sz = rawScale.z ?? 1;
+      }
+      this.initialScale = { x: sx, y: sy, z: sz };
+    } else {
+      this.currentVisualEl = null;
+      this.initialScale = null;
+    }
+
     // Reset and prepare visual progress indicator
     this.ensureProgressIndicator();
     this.setProgress(0, hotspotData.appearance?.color);
@@ -1098,6 +1217,16 @@ class GazeManager {
       // Update circular indicator
       this.setProgress(progress, this.currentHotspotData?.appearance?.color);
 
+      // If Gaze Image hotspot: animate image scaling up smoothly to occupy the entire view
+      if (this.currentVisualEl && this.initialScale) {
+        const ease = Math.pow(progress, 1.8);
+        const multiplier = 1 + 24 * ease;
+        this.currentVisualEl.setAttribute(
+          'scale',
+          `${(this.initialScale.x * multiplier).toFixed(4)} ${(this.initialScale.y * multiplier).toFixed(4)} ${(this.initialScale.z * multiplier).toFixed(4)}`
+        );
+      }
+
       // If duration reached and navigation not yet triggered
       if (progress >= 1 && !this.hasTriggered) {
         this.hasTriggered = true;
@@ -1111,6 +1240,19 @@ class GazeManager {
     };
 
     this.animationFrameId = requestAnimFrame(tick);
+  }
+
+  /**
+   * Restores initial scale of gaze image hotspot if it was being animated
+   */
+  restoreGazeImageScale() {
+    if (this.currentVisualEl && this.initialScale) {
+      try {
+        this.currentVisualEl.setAttribute('scale', `${this.initialScale.x} ${this.initialScale.y} ${this.initialScale.z}`);
+      } catch (e) {}
+    }
+    this.currentVisualEl = null;
+    this.initialScale = null;
   }
 
   /**
@@ -1142,15 +1284,6 @@ class GazeManager {
       sceneId: currentSceneId
     });
 
-    const isPhoto = hotspotData.action?.type === 'photo' || hotspotData.type === 'photo';
-    if (isPhoto) {
-      this.resetProgress();
-      if (this.tour && typeof this.tour.openPhotoModal === 'function') {
-        this.tour.openPhotoModal(hotspotData.action, hotspotData);
-      }
-      return;
-    }
-
     const targetSceneId = hotspotData.action?.target;
     if (targetSceneId) {
       this.isNavigating = true;
@@ -1159,9 +1292,11 @@ class GazeManager {
         console.error('Gaze navigation failed:', err);
       }).finally(() => {
         this.isNavigating = false;
+        this.restoreGazeImageScale();
       });
     } else {
       this.resetProgress();
+      this.restoreGazeImageScale();
     }
   }
 
@@ -1186,6 +1321,7 @@ class GazeManager {
       this.animationFrameId = null;
     }
 
+    this.restoreGazeImageScale();
     this.resetProgress();
 
     this.currentHotspotEl = null;
@@ -1252,21 +1388,26 @@ class GazeManager {
 
 /**
  * Checks whether a hotspot is configured as a Gaze Navigation hotspot.
+ * Only navigation hotspots (gazeNavigate, gazeImage) are gaze hotspots.
+ * Static photos/images are not gaze hotspots.
  * @param {Object} hotspot
  * @param {Object} [tourConfig] - Optional tour configuration to check global gaze settings
  * @returns {boolean}
  */
 function isGazeHotspot(hotspot, tourConfig = null) {
   if (!hotspot) return false;
+  const actionType = hotspot.action?.type || hotspot.type;
+  if (actionType === 'photo' || actionType === 'image') {
+    return false;
+  }
   if (tourConfig?.settings?.gazeNavigation || tourConfig?.settings?.gazeForAll) {
     return true;
   }
   return (
-    hotspot.action?.type === 'gazeNavigate' ||
-    hotspot.action?.type === 'gaze' ||
-    hotspot.action?.type === 'gazePhoto' ||
-    hotspot.type === 'gazeNavigate' ||
-    hotspot.type === 'gaze' ||
+    actionType === 'gazeNavigate' ||
+    actionType === 'gazeImage' ||
+    actionType === 'gaze' ||
+    actionType === 'gazePhoto' ||
     hotspot.action?.gaze === true ||
     hotspot.gaze === true
   );
@@ -1408,8 +1549,10 @@ class HotspotManager {
     // (IconRenderer uses a shared renderContainer that would be corrupted by parallel generation)
     for (let index = 0; index < hotspots.length; index++) {
       const hotspot = hotspots[index];
-      const isPhoto = hotspot.action?.type === 'photo' || hotspot.type === 'photo';
-      const icon = hotspot.appearance?.icon || (isPhoto ? hotspot.action?.url : null) || this.defaultSettings.icon;
+      const isGazeImage = hotspot.action?.type === 'gazeImage' || hotspot.type === 'gazeImage';
+      const isStaticPhoto = hotspot.action?.type === 'photo' || hotspot.action?.type === 'image' || hotspot.type === 'photo' || hotspot.type === 'image';
+      const isPhoto = isStaticPhoto || isGazeImage;
+      const icon = (isPhoto ? (hotspot.action?.url || hotspot.appearance?.icon) : hotspot.appearance?.icon) || this.defaultSettings.icon;
       const color = hotspot.appearance?.color || '#ffffff';
       
       if (!icon) continue;
@@ -1465,13 +1608,20 @@ class HotspotManager {
    */
   createHotspot(hotspot, index) {
     const isGaze = isGazeHotspot(hotspot, this.tour?.config);
-    const isPhoto = hotspot.action?.type === 'photo' || hotspot.type === 'photo';
+    const isGazeImage = hotspot.action?.type === 'gazeImage' || hotspot.type === 'gazeImage';
+    const isStaticPhoto = hotspot.action?.type === 'photo' || hotspot.action?.type === 'image' || hotspot.type === 'photo' || hotspot.type === 'image';
+    const isPhoto = isStaticPhoto || isGazeImage;
+    const isEditor = Boolean(this.tour?.config?.isEditor);
+
     const hotspotEl = document.createElement('a-entity');
     hotspotEl.classList.add('swt-hotspot');
     if (isGaze) {
       hotspotEl.classList.add('swt-gaze-hotspot');
     }
-    if (isPhoto) {
+    if (isGazeImage) {
+      hotspotEl.classList.add('swt-gaze-image-hotspot');
+    }
+    if (isStaticPhoto) {
       hotspotEl.classList.add('swt-photo-hotspot');
     }
     
@@ -1480,7 +1630,7 @@ class HotspotManager {
     hotspotEl.setAttribute('position', `${pos.x} ${pos.y} ${pos.z}`);
 
     // Get icon and color
-    const icon = hotspot.appearance?.icon || (isPhoto ? hotspot.action?.url : null) || this.defaultSettings.icon;
+    const icon = (isPhoto ? (hotspot.action?.url || hotspot.appearance?.icon) : hotspot.appearance?.icon) || this.defaultSettings.icon;
     const color = hotspot.appearance?.color || (isPhoto ? '#ffffff' : '#4CC3D9');
     
     // Check if we have a preloaded icon asset (either from URL or generated from icon name)
@@ -1490,6 +1640,7 @@ class HotspotManager {
     const assetEl = assetsEl ? assetsEl.querySelector(`#${assetId}`) : null;
     
     let visualEl;
+    let titleWrap = null;
     
     // Check if icon asset was successfully loaded/generated
     if (icon) {
@@ -1522,6 +1673,42 @@ class HotspotManager {
         visualEl.setAttribute('width', w.toFixed(3));
         visualEl.setAttribute('height', h.toFixed(3));
 
+        // Title above photo/image:
+        // - For gazeImage: title is ALWAYS visible (visible="true")
+        // - For staticPhoto: title appears ONLY on focus (visible="false" initially, shown on focus by swt-static-photo)
+        const title = hotspot.tooltip?.text || hotspot.title || hotspot.name || '';
+        if (title) {
+          titleWrap = document.createElement('a-entity');
+          titleWrap.setAttribute('id', `swt-photo-title-${index}`);
+          const titleY = (h * 0.5) + 0.32;
+          titleWrap.setAttribute('position', `0 ${titleY.toFixed(3)} 0.02`);
+          titleWrap.setAttribute('swt-billboard', 'enabled: true');
+
+          // gazeImage is ALWAYS visible; staticPhoto is visible ONLY on focus
+          titleWrap.setAttribute('visible', isGazeImage ? 'true' : 'false');
+
+          const titleBg = document.createElement('a-plane');
+          titleBg.setAttribute('color', '#000000');
+          titleBg.setAttribute('opacity', '0.75');
+          const bgWidth = Math.max(1.2, Math.min(3.5, title.length * 0.12 + 0.4));
+          titleBg.setAttribute('width', bgWidth.toFixed(2));
+          titleBg.setAttribute('height', '0.42');
+          titleBg.setAttribute('material', 'shader: flat; side: double; transparent: true');
+          titleWrap.appendChild(titleBg);
+
+          const titleText = document.createElement('a-text');
+          titleText.setAttribute('value', title);
+          titleText.setAttribute('align', 'center');
+          titleText.setAttribute('color', '#ffffff');
+          titleText.setAttribute('width', '2.8');
+          titleText.setAttribute('position', '0 0 0.01');
+          titleText.setAttribute('wrap-count', '24');
+          titleWrap.appendChild(titleText);
+
+          // Append to hotspotEl so title stays stably positioned above the hotspot
+          hotspotEl.appendChild(titleWrap);
+        }
+
         // Fallback: when texture loads asynchronously, re-apply natural aspect ratio if needed
         visualEl.addEventListener('materialtextureloaded', () => {
           const texture = visualEl.getObject3D('mesh')?.material?.map;
@@ -1541,6 +1728,11 @@ class HotspotManager {
               visualEl.setAttribute('height', th.toFixed(3));
               hotspot.appearance = hotspot.appearance || {};
               hotspot.appearance.aspectRatio = loadedAspect;
+
+              if (titleWrap) {
+                const updatedY = (th * 0.5) + 0.32;
+                titleWrap.setAttribute('position', `0 ${updatedY.toFixed(3)} 0.02`);
+              }
             }
           }
         });
@@ -1564,20 +1756,14 @@ class HotspotManager {
     // Make it always face the camera (billboard effect)
     visualEl.setAttribute('swt-billboard', 'enabled: true');
 
-    // Add cursor interaction
-    visualEl.setAttribute('class', 'clickable');
-
-    // Attach appropriate component based on hotspot type
+    // Attach interaction components based on hotspot type
     if (isGaze) {
+      visualEl.setAttribute('class', 'clickable');
       visualEl.setAttribute('swt-gaze-hotspot', {
         hotspotData: JSON.stringify(hotspot)
       });
-      // Also attach swt-hotspot-listener so touch/click continues to work
-      visualEl.setAttribute('swt-hotspot-listener', {
-        hotspotData: JSON.stringify(hotspot)
-      });
 
-      // Add distinctive outer gaze ring indicator around navigation hotspots (omit on photos)
+      // Add distinctive outer gaze ring indicator around navigation hotspots (omit on image-based hotspots)
       if (!isPhoto) {
         const gazeRing = document.createElement('a-ring');
         gazeRing.setAttribute('id', `swt-gaze-ring-${index}`);
@@ -1588,7 +1774,15 @@ class HotspotManager {
         gazeRing.setAttribute('swt-billboard', 'enabled: true');
         hotspotEl.appendChild(gazeRing);
       }
-    } else {
+    } else if (isStaticPhoto) {
+      // Static photos: title appears ONLY when focused by cursor/reticle
+      visualEl.setAttribute('class', 'clickable');
+      visualEl.setAttribute('swt-static-photo', {
+        titleId: `swt-photo-title-${index}`,
+        hotspotData: JSON.stringify(hotspot)
+      });
+    } else if (isEditor) {
+      visualEl.setAttribute('class', 'clickable');
       visualEl.setAttribute('swt-hotspot-listener', {
         hotspotData: JSON.stringify(hotspot)
       });
@@ -2245,7 +2439,13 @@ class Tour {
    */
   handleAction(action, hotspotData = null) {
     switch (action.type) {
+      case "gazeNavigate":
+      case "gazeImage":
+        // Handled exclusively by GazeManager on gaze countdown completion
+        break;
+
       case "navigateTo":
+        // Legacy fallback only if explicit target exists
         if (action.target) {
           this.navigateTo(action.target).catch((err) => {
             console.error("Navigation failed:", err);
@@ -2253,13 +2453,9 @@ class Tour {
         }
         break;
 
-      case "gazeNavigate":
-        // Handled exclusively by GazeManager on gaze countdown completion
-        break;
-
       case "photo":
       case "image":
-        this.openPhotoModal(action, hotspotData);
+        // Static photos are non-clickable and display their title in 3D without modal
         break;
 
       default:

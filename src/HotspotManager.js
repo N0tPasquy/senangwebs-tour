@@ -136,8 +136,10 @@ export class HotspotManager {
     // (IconRenderer uses a shared renderContainer that would be corrupted by parallel generation)
     for (let index = 0; index < hotspots.length; index++) {
       const hotspot = hotspots[index];
-      const isPhoto = hotspot.action?.type === 'photo' || hotspot.type === 'photo';
-      const icon = hotspot.appearance?.icon || (isPhoto ? hotspot.action?.url : null) || this.defaultSettings.icon;
+      const isGazeImage = hotspot.action?.type === 'gazeImage' || hotspot.type === 'gazeImage';
+      const isStaticPhoto = hotspot.action?.type === 'photo' || hotspot.action?.type === 'image' || hotspot.type === 'photo' || hotspot.type === 'image';
+      const isPhoto = isStaticPhoto || isGazeImage;
+      const icon = (isPhoto ? (hotspot.action?.url || hotspot.appearance?.icon) : hotspot.appearance?.icon) || this.defaultSettings.icon;
       const color = hotspot.appearance?.color || '#ffffff';
       
       if (!icon) continue;
@@ -193,13 +195,20 @@ export class HotspotManager {
    */
   createHotspot(hotspot, index) {
     const isGaze = isGazeHotspot(hotspot, this.tour?.config);
-    const isPhoto = hotspot.action?.type === 'photo' || hotspot.type === 'photo';
+    const isGazeImage = hotspot.action?.type === 'gazeImage' || hotspot.type === 'gazeImage';
+    const isStaticPhoto = hotspot.action?.type === 'photo' || hotspot.action?.type === 'image' || hotspot.type === 'photo' || hotspot.type === 'image';
+    const isPhoto = isStaticPhoto || isGazeImage;
+    const isEditor = Boolean(this.tour?.config?.isEditor);
+
     const hotspotEl = document.createElement('a-entity');
     hotspotEl.classList.add('swt-hotspot');
     if (isGaze) {
       hotspotEl.classList.add('swt-gaze-hotspot');
     }
-    if (isPhoto) {
+    if (isGazeImage) {
+      hotspotEl.classList.add('swt-gaze-image-hotspot');
+    }
+    if (isStaticPhoto) {
       hotspotEl.classList.add('swt-photo-hotspot');
     }
     
@@ -208,7 +217,7 @@ export class HotspotManager {
     hotspotEl.setAttribute('position', `${pos.x} ${pos.y} ${pos.z}`);
 
     // Get icon and color
-    const icon = hotspot.appearance?.icon || (isPhoto ? hotspot.action?.url : null) || this.defaultSettings.icon;
+    const icon = (isPhoto ? (hotspot.action?.url || hotspot.appearance?.icon) : hotspot.appearance?.icon) || this.defaultSettings.icon;
     const color = hotspot.appearance?.color || (isPhoto ? '#ffffff' : '#4CC3D9');
     
     // Check if we have a preloaded icon asset (either from URL or generated from icon name)
@@ -218,6 +227,7 @@ export class HotspotManager {
     const assetEl = assetsEl ? assetsEl.querySelector(`#${assetId}`) : null;
     
     let visualEl;
+    let titleWrap = null;
     
     // Check if icon asset was successfully loaded/generated
     if (icon) {
@@ -250,6 +260,42 @@ export class HotspotManager {
         visualEl.setAttribute('width', w.toFixed(3));
         visualEl.setAttribute('height', h.toFixed(3));
 
+        // Title above photo/image:
+        // - For gazeImage: title is ALWAYS visible (visible="true")
+        // - For staticPhoto: title appears ONLY on focus (visible="false" initially, shown on focus by swt-static-photo)
+        const title = hotspot.tooltip?.text || hotspot.title || hotspot.name || '';
+        if (title) {
+          titleWrap = document.createElement('a-entity');
+          titleWrap.setAttribute('id', `swt-photo-title-${index}`);
+          const titleY = (h * 0.5) + 0.32;
+          titleWrap.setAttribute('position', `0 ${titleY.toFixed(3)} 0.02`);
+          titleWrap.setAttribute('swt-billboard', 'enabled: true');
+
+          // gazeImage is ALWAYS visible; staticPhoto is visible ONLY on focus
+          titleWrap.setAttribute('visible', isGazeImage ? 'true' : 'false');
+
+          const titleBg = document.createElement('a-plane');
+          titleBg.setAttribute('color', '#000000');
+          titleBg.setAttribute('opacity', '0.75');
+          const bgWidth = Math.max(1.2, Math.min(3.5, title.length * 0.12 + 0.4));
+          titleBg.setAttribute('width', bgWidth.toFixed(2));
+          titleBg.setAttribute('height', '0.42');
+          titleBg.setAttribute('material', 'shader: flat; side: double; transparent: true');
+          titleWrap.appendChild(titleBg);
+
+          const titleText = document.createElement('a-text');
+          titleText.setAttribute('value', title);
+          titleText.setAttribute('align', 'center');
+          titleText.setAttribute('color', '#ffffff');
+          titleText.setAttribute('width', '2.8');
+          titleText.setAttribute('position', '0 0 0.01');
+          titleText.setAttribute('wrap-count', '24');
+          titleWrap.appendChild(titleText);
+
+          // Append to hotspotEl so title stays stably positioned above the hotspot
+          hotspotEl.appendChild(titleWrap);
+        }
+
         // Fallback: when texture loads asynchronously, re-apply natural aspect ratio if needed
         visualEl.addEventListener('materialtextureloaded', () => {
           const texture = visualEl.getObject3D('mesh')?.material?.map;
@@ -269,6 +315,11 @@ export class HotspotManager {
               visualEl.setAttribute('height', th.toFixed(3));
               hotspot.appearance = hotspot.appearance || {};
               hotspot.appearance.aspectRatio = loadedAspect;
+
+              if (titleWrap) {
+                const updatedY = (th * 0.5) + 0.32;
+                titleWrap.setAttribute('position', `0 ${updatedY.toFixed(3)} 0.02`);
+              }
             }
           }
         });
@@ -292,20 +343,14 @@ export class HotspotManager {
     // Make it always face the camera (billboard effect)
     visualEl.setAttribute('swt-billboard', 'enabled: true');
 
-    // Add cursor interaction
-    visualEl.setAttribute('class', 'clickable');
-
-    // Attach appropriate component based on hotspot type
+    // Attach interaction components based on hotspot type
     if (isGaze) {
+      visualEl.setAttribute('class', 'clickable');
       visualEl.setAttribute('swt-gaze-hotspot', {
         hotspotData: JSON.stringify(hotspot)
       });
-      // Also attach swt-hotspot-listener so touch/click continues to work
-      visualEl.setAttribute('swt-hotspot-listener', {
-        hotspotData: JSON.stringify(hotspot)
-      });
 
-      // Add distinctive outer gaze ring indicator around navigation hotspots (omit on photos)
+      // Add distinctive outer gaze ring indicator around navigation hotspots (omit on image-based hotspots)
       if (!isPhoto) {
         const gazeRing = document.createElement('a-ring');
         gazeRing.setAttribute('id', `swt-gaze-ring-${index}`);
@@ -316,7 +361,15 @@ export class HotspotManager {
         gazeRing.setAttribute('swt-billboard', 'enabled: true');
         hotspotEl.appendChild(gazeRing);
       }
-    } else {
+    } else if (isStaticPhoto) {
+      // Static photos: title appears ONLY when focused by cursor/reticle
+      visualEl.setAttribute('class', 'clickable');
+      visualEl.setAttribute('swt-static-photo', {
+        titleId: `swt-photo-title-${index}`,
+        hotspotData: JSON.stringify(hotspot)
+      });
+    } else if (isEditor) {
+      visualEl.setAttribute('class', 'clickable');
       visualEl.setAttribute('swt-hotspot-listener', {
         hotspotData: JSON.stringify(hotspot)
       });

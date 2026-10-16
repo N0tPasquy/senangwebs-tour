@@ -251,29 +251,35 @@ class TourEditor {
 
         document.getElementById('hotspotActionType')?.addEventListener('change', async (e) => {
             const actionType = e.target.value;
+            const isPhoto = actionType === 'photo';
+            const isGazeImage = actionType === 'gazeImage';
+            const isGazeIcon = actionType === 'gazeNavigate';
             
             const targetGroup = document.getElementById('hotspotTargetGroup');
             const goToBtn = document.getElementById('hotspotGoToSceneBtn');
             const gazeGroup = document.getElementById('hotspotGazeDurationGroup');
             const photoGroup = document.getElementById('hotspotPhotoGroup');
             const iconGroup = document.getElementById('hotspotIconGroup');
+            const descGroup = document.getElementById('hotspotDescriptionGroup');
             
-            if (targetGroup) targetGroup.style.display = actionType === 'photo' ? 'none' : 'block';
+            if (targetGroup) targetGroup.style.display = isPhoto ? 'none' : 'block';
             if (goToBtn) {
                 const targetVal = document.getElementById('hotspotTarget')?.value;
-                goToBtn.style.display = (actionType !== 'photo' && targetVal) ? 'inline-block' : 'none';
+                goToBtn.style.display = (!isPhoto && targetVal) ? 'inline-block' : 'none';
             }
-            if (gazeGroup) gazeGroup.style.display = actionType === 'gazeNavigate' ? 'block' : 'none';
-            if (photoGroup) photoGroup.style.display = actionType === 'photo' ? 'block' : 'none';
-            if (iconGroup) iconGroup.style.display = actionType === 'photo' ? 'none' : 'block';
+            if (gazeGroup) gazeGroup.style.display = isPhoto ? 'none' : 'block';
+            if (photoGroup) photoGroup.style.display = (isPhoto || isGazeImage) ? 'block' : 'none';
+            if (iconGroup) iconGroup.style.display = isGazeIcon ? 'block' : 'none';
+            if (descGroup) descGroup.style.display = 'none';
 
             await this.updateCurrentHotspot('action.type', actionType);
 
-            if (actionType === 'gazeNavigate') {
+            if (isGazeIcon || isGazeImage) {
                 const durInput = document.getElementById('hotspotGazeDuration');
                 const dur = durInput ? parseInt(durInput.value, 10) || 3000 : 3000;
                 await this.updateCurrentHotspot('action.duration', dur);
-            } else if (actionType === 'photo') {
+            }
+            if (isPhoto || isGazeImage) {
                 const cur = this.hotspotEditor.getCurrentHotspot();
                 if (cur && cur.action?.url) {
                     await this.updateCurrentHotspot('appearance.icon', cur.action.url);

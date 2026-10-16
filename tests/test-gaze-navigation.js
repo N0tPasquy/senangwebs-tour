@@ -549,40 +549,18 @@ async function runTests() {
     assert(Math.abs(pDim.width - (1.5 * (1080 / 1920))) < 0.01, 'Portrait photo width maintains 9:16 ratio');
   }
 
-  // --- Test 20: Photo hotspot title and description resolution & gaze action trigger ---
-  console.log('\nTest 20: Photo hotspot title and description resolution & gaze action trigger');
+  // --- Test 20: Static photo hotspot is not gaze-navigable and displays title above it ---
+  console.log('\nTest 20: Static photo hotspot non-clickable / non-gaze behavior');
   {
     const photoHotspot = {
       id: 'photo-1',
       action: { type: 'photo', url: 'photo.jpg' },
-      tooltip: { text: 'Stadio Maradona', description: 'Stadio Del Napoli' }
+      tooltip: { text: 'Stadio Maradona' }
     };
 
-    let openedData = null;
-    let openedHotspot = null;
-    const mockTour = {
-      getCurrentSceneId: () => 'scene-1',
-      emit: () => {},
-      openPhotoModal: (action, hotspot) => {
-        openedData = action;
-        openedHotspot = hotspot;
-      }
-    };
-
-    const mockSceneEl = new MockElement('a-scene');
-    const gazeManager = new GazeManager(mockTour, mockSceneEl);
-
-    // Gaze trigger on photo hotspot
-    gazeManager.triggerNavigation(photoHotspot);
-
-    assert(openedData !== null, 'openPhotoModal called upon gaze trigger');
-    assert(openedHotspot === photoHotspot, 'hotspotData passed to openPhotoModal');
-    
-    // Check title and description extraction logic
-    const title = openedData?.title || openedHotspot?.tooltip?.text || '';
-    const desc = openedData?.description || openedHotspot?.tooltip?.description || '';
-    assert(title === 'Stadio Maradona', 'Title correctly resolved from tooltip.text');
-    assert(desc === 'Stadio Del Napoli', 'Description correctly resolved from tooltip.description');
+    assert(!isGazeHotspot(photoHotspot), 'Static photo hotspot is not classified as gaze hotspot');
+    const title = photoHotspot.tooltip?.text || '';
+    assert(title === 'Stadio Maradona', 'Title correctly resolved for display above static photo');
   }
 
   // --- Test 21: Global gaze configuration & gazeForAll support ---
@@ -596,6 +574,38 @@ async function runTests() {
     assert(isGazeHotspot(standardHotspot) === false, 'Standard hotspot without global config is not gaze');
     assert(isGazeHotspot(standardHotspot, { settings: { gazeNavigation: true } }) === true, 'Global gazeNavigation enables gaze for all hotspots');
     assert(isGazeHotspot(standardHotspot, { settings: { gazeForAll: true } }) === true, 'Global gazeForAll enables gaze for all hotspots');
+  }
+
+  // --- Test 22: Gaze Image hotspot zoom animation and navigation trigger ---
+  console.log('\nTest 22: Gaze Image hotspot zoom animation and navigation trigger');
+  {
+    const gazeImageHotspot = {
+      id: 'gaze-img-1',
+      action: { type: 'gazeImage', target: 'scene-next', duration: 3000, url: 'next-preview.jpg' },
+      appearance: { scale: '1.0 1.0 1.0' }
+    };
+
+    assert(isGazeHotspot(gazeImageHotspot), 'Gaze Image hotspot is correctly classified as gaze hotspot');
+
+    const sceneEl = new MockElement('a-scene');
+    const tour = new MockTour({ initialScene: 'scene-1' });
+    const gazeManager = new GazeManager(tour, sceneEl);
+    const hotspotEl = new MockElement('a-entity');
+    const imageEl = new MockElement('a-image');
+    imageEl.setAttribute('scale', '1 1 1');
+    hotspotEl.appendChild(imageEl);
+    sceneEl.appendChild(hotspotEl);
+
+    // Gaze enter
+    gazeManager.onGazeEnter({ detail: { el: hotspotEl, hotspotData: gazeImageHotspot } });
+    assert(gazeManager.currentHotspotEl === hotspotEl, 'GazeManager active on gazeImage hotspot');
+    assert(gazeManager.currentVisualEl !== null, 'Visual element tracked for zoom animation');
+
+    // Trigger navigation on timer completion
+    gazeManager.triggerNavigation(gazeImageHotspot);
+    assert(tour.navigations.length === 1 && tour.navigations[0] === 'scene-next', 'Navigated to target scene upon gazeImage completion');
+
+    gazeManager.destroy();
   }
   console.log(`\n=== RESULTS: ${passCount} PASSED, ${failCount} FAILED ===\n`);
   if (failCount > 0) {

@@ -13,12 +13,17 @@ class HotspotEditor {
      * @param {string} targetSceneId - Target scene ID for navigation
      * @param {Object} cameraOrientation - Camera orientation at creation {pitch, yaw} in radians
      */
-    addHotspot(position, targetSceneId = '', cameraOrientation = null, actionType = 'navigateTo', duration = 3000) {
+    addHotspot(position, targetSceneId = '', cameraOrientation = null, actionType = 'gazeNavigate', duration = 3000) {
         const scene = this.editor.sceneManager.getCurrentScene();
         if (!scene) {
             showToast('No scene selected', 'error');
             return null;
         }
+
+        const isGazeType = actionType === 'gazeNavigate' || actionType === 'gazeImage';
+        let defaultTitle = 'New Gaze Hotspot';
+        if (actionType === 'gazeImage') defaultTitle = 'New Image Hotspot';
+        else if (actionType === 'photo') defaultTitle = 'New Photo';
 
         // Use unified library format with nested structure
         const hotspot = {
@@ -28,15 +33,15 @@ class HotspotEditor {
             action: {
                 type: actionType,
                 target: targetSceneId,
-                ...(actionType === 'gazeNavigate' ? { duration } : {})
+                ...(isGazeType ? { duration } : {})
             },
             appearance: {
-                color: actionType === 'gazeNavigate' ? '#4CC3D9' : '#00ff00',
+                color: isGazeType ? '#4CC3D9' : '#ffffff',
                 scale: '1 1 1',
                 icon: ''
             },
             tooltip: {
-                text: actionType === 'gazeNavigate' ? 'New Gaze Hotspot' : 'New Hotspot',
+                text: defaultTitle,
                 description: ''
             }
         };

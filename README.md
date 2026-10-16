@@ -34,11 +34,12 @@ A powerful, data-driven 360° virtual tour system built on A-Frame WebVR. Create
 - **Visual Editor** - No-code tour builder with click-to-place hotspot interface
 - **Viewer Library** - JavaScript library for embedding tours
 - **Standalone Viewer** - HTML viewer with drag-and-drop JSON support
-- **Mobile & VR Ready** - Full touch, mouse, and VR headset support
-- **Gaze Navigation (Hands-Free VR)** - Automatic navigation upon holding gaze on a hotspot with animated circular countdown ring
-- **Static Photo Hotspots** - Place photos in 3D space maintaining native aspect ratio, with full-screen responsive white modal view
-- **Dynamic Hotspot Scaling** - Scale hotspots and photos with proportional tooltip position and dimension adjustment
-- **Customizable Hotspots** - Custom icons, colors, scales, and tooltip text
+- **Mobile & VR Headset Ready** - Designed for VR headsets with phone inside (hands-free reticle gaze interaction, no screen touches needed)
+- **Gaze Navigation Hotspots** - Automatic navigation upon holding gaze on an icon hotspot with animated circular countdown ring
+- **Gaze Image Hotspots** - Immersive navigation hotspots displaying a custom photo that zooms in over the gaze duration to fill the view, transitioning into the next scene
+- **Static 3D Photos** - Non-clickable photos placed in 3D space with their title displayed directly above, maintaining native aspect ratio
+- **Dynamic Hotspot Scaling** - Scale hotspots and photos with proportional title position and dimension adjustment
+- **Customizable Hotspots** - Custom icons, colors, scales, and title text
 - **Multiple Export Formats** - JSON configuration or standalone HTML files
 
 ### Developer-Friendly
@@ -315,12 +316,10 @@ Both the editor and viewer use the same data format. Scenes are stored as an **a
             z: -3
           },
           action: {                // Required: Hotspot action
-            type: "navigateTo",    // "navigateTo" | "gazeNavigate" | "photo"
-            target: "scene-id-2",  // Required for navigateTo & gazeNavigate: Target scene ID
-            duration: 3000,        // Optional for gazeNavigate: Countdown in ms (default: 3000)
-            url: "photo.jpg",      // Required for photo: High-res image URL or data URL
-            title: "Photo Title",  // Optional for photo: Modal title
-            description: "Details" // Optional for photo: Modal description text
+            type: "gazeNavigate",  // "gazeNavigate" | "gazeImage" | "photo"
+            target: "scene-id-2",  // Required for gazeNavigate & gazeImage: Target scene ID
+            duration: 3000,        // Optional for gazeNavigate & gazeImage: Countdown in ms (default: 3000)
+            url: "photo.jpg"       // Required for gazeImage & photo: Image URL or data URL
           },
           appearance: {            // Optional: Visual customization
             color: "#00ff00",      // Default: "#00ff00" (or "#ffffff" for photos)

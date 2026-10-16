@@ -1,483 +1,370 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>SWT Virtual Tour Editor</title>
-    <link rel="stylesheet" href="../dist/swt-editor.css" />
-    <script src="../dist/swt.js"></script>
-  </head>
-  <body>
-    <!-- Header -->
-    <header class="editor-header">
-      <div class="header-left">
-        <div class="logo">
-          <div class="logo-icon"></div>
-          <span>SWT Editor</span>
-        </div>
-        <div class="project-info">
-          <span class="project-label">Project:</span>
-          <input
-            type="text"
-            id="project-name"
-            class="project-name"
-            value="My Virtual Tour"
-            style="
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SWT Virtual Tour Editor</title>
+  <link rel="stylesheet" href="../dist/swt-editor.css" />
+  <script src="../dist/swt.js"></script>
+</head>
+
+<body>
+  <!-- Header -->
+  <header class="editor-header">
+    <div class="header-left">
+      <div class="logo">
+        <div class="logo-icon"></div>
+        <span>SWT Editor</span>
+      </div>
+      <div class="project-info">
+        <span class="project-label">Project:</span>
+        <input type="text" id="project-name" class="project-name" value="My Virtual Tour" style="
               background: transparent;
               border: none;
               color: var(--text-primary);
               font-size: 14px;
               font-weight: 500;
               outline: none;
-            "
-          />
+            " />
+      </div>
+    </div>
+    <div class="header-actions">
+      <button class="btn btn-secondary" id="newBtn" title="New Project">
+        New
+      </button>
+      <button class="btn btn-secondary" id="importBtn" title="Import JSON">
+        Import
+      </button>
+      <button class="btn btn-secondary" id="exportBtn" title="Export JSON">
+        Export
+      </button>
+      <button class="btn btn-primary" id="previewBtn" title="Preview Tour">
+        Preview
+      </button>
+      <button class="btn btn-success" id="saveBtn" title="Save Project (Ctrl+S)">
+        Save
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Editor -->
+  <main class="editor-main">
+    <!-- Scenes Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <h2 class="sidebar-title">Scenes</h2>
+        <button class="btn-add" id="addSceneBtn">
+          <ss-icon icon="plus" thickness="2.2"></ss-icon>Add Scene
+        </button>
+      </div>
+      <div class="scenes-list" id="sceneList">
+        <div class="empty-state">
+          <p>No scenes yet</p>
+          <p class="hint">Click "Add Scene" to upload a 360° panorama</p>
         </div>
       </div>
-      <div class="header-actions">
-        <button class="btn btn-secondary" id="newBtn" title="New Project">
-          New
-        </button>
-        <button class="btn btn-secondary" id="importBtn" title="Import JSON">
-          Import
-        </button>
-        <button class="btn btn-secondary" id="exportBtn" title="Export JSON">
-          Export
-        </button>
-        <button class="btn btn-primary" id="previewBtn" title="Preview Tour">
-          Preview
-        </button>
-        <button
-          class="btn btn-success"
-          id="saveBtn"
-          title="Save Project (Ctrl+S)"
-        >
-          Save
-        </button>
-      </div>
-    </header>
+    </aside>
 
-    <!-- Main Editor -->
-    <main class="editor-main">
-      <!-- Scenes Sidebar -->
-      <aside class="sidebar">
-        <div class="sidebar-header">
-          <h2 class="sidebar-title">Scenes</h2>
-          <button class="btn-add" id="addSceneBtn">
-            <ss-icon icon="plus" thickness="2.2"></ss-icon>Add Scene
+    <!-- Canvas Area -->
+    <div class="canvas-area" id="canvasArea">
+      <div class="preview-container">
+        <div class="preview-area" id="preview">
+          <div class="preview-empty">
+            <p>No scene selected</p>
+            <p>Upload a 360° panorama to start</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Properties Panel -->
+    <aside class="properties-panel">
+      <div class="toolbar">
+        <div class="toolbar-tabs">
+          <button class="tab" data-tab="scene">
+            <ss-icon icon="globe-alt" thickness="2.2"></ss-icon><span>Scene</span>
+          </button>
+          <button class="tab active" data-tab="hotspot">
+            <ss-icon icon="sun" thickness="2.2"></ss-icon><span>Hotspot</span>
+          </button>
+          <button class="tab" data-tab="tour">
+            <ss-icon icon="panorama" thickness="2.2"></ss-icon><span>Tour</span>
           </button>
         </div>
-        <div class="scenes-list" id="sceneList">
-          <div class="empty-state">
-            <p>No scenes yet</p>
-            <p class="hint">Click "Add Scene" to upload a 360° panorama</p>
-          </div>
-        </div>
-      </aside>
-
-      <!-- Canvas Area -->
-      <div class="canvas-area" id="canvasArea">
-        <div class="preview-container">
-          <div class="preview-area" id="preview">
-            <div class="preview-empty">
-              <p>No scene selected</p>
-              <p>Upload a 360° panorama to start</p>
-            </div>
-          </div>
-        </div>
       </div>
 
-      <!-- Properties Panel -->
-      <aside class="properties-panel">
-        <div class="toolbar">
-          <div class="toolbar-tabs">
-            <button class="tab" data-tab="scene">
-              <ss-icon icon="globe-alt" thickness="2.2"></ss-icon
-              ><span>Scene</span>
-            </button>
-            <button class="tab active" data-tab="hotspot">
-              <ss-icon icon="sun" thickness="2.2"></ss-icon><span>Hotspot</span>
-            </button>
-            <button class="tab" data-tab="tour">
-              <ss-icon icon="panorama" thickness="2.2"></ss-icon
-              ><span>Tour</span>
-            </button>
-          </div>
-        </div>
-
-        <div class="panel-content" id="panelContent">
-          <!-- Hotspot Tab Content -->
-          <div class="tab-content active" id="hotspotTab">
-            <div class="section" id="hotspotAll">
-              <div class="hotspot-controls">
-                <button class="btn btn-primary" id="addHotspotBtn">
-                  <ss-icon icon="plus" thickness="2.2"></ss-icon>Hotspot
-                </button>
-                <button class="btn btn-secondary" id="clearHotspotsBtn">
-                  Clear All
-                </button>
-              </div>
-
-              <div class="hotspot-list" id="hotspotList">
-                <!-- Hotspots will be listed here dynamically -->
-              </div>
+      <div class="panel-content" id="panelContent">
+        <!-- Hotspot Tab Content -->
+        <div class="tab-content active" id="hotspotTab">
+          <div class="section" id="hotspotAll">
+            <div class="hotspot-controls">
+              <button class="btn btn-primary" id="addHotspotBtn">
+                <ss-icon icon="plus" thickness="2.2"></ss-icon>Hotspot
+              </button>
+              <button class="btn btn-secondary" id="clearHotspotsBtn">
+                Clear All
+              </button>
             </div>
 
-            <div class="section" id="hotspotProperties" style="display: none">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-                <h3
-                  style="
+            <div class="hotspot-list" id="hotspotList">
+              <!-- Hotspots will be listed here dynamically -->
+            </div>
+          </div>
+
+          <div class="section" id="hotspotProperties" style="display: none">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+              <h3 style="
                     font-size: 14px;
                     color: var(--text-secondary);
                     margin: 0;
-                  "
-                >
-                  Hotspot Properties
-                </h3>
-                <div style="display: flex; gap: 6px;">
-                  <button type="button" class="btn btn-secondary btn-sm" id="pointCameraToHotspotBtn" title="Inquadra l'hotspot nella vista" style="font-size: 11px; padding: 3px 8px;">🎯 Punta</button>
-                  <button type="button" class="btn btn-secondary btn-sm" id="closeHotspotPropertiesBtn" title="Deseleziona hotspot" style="font-size: 11px; padding: 3px 8px;">✕</button>
-                </div>
+                  ">
+                Hotspot Properties
+              </h3>
+              <div style="display: flex; gap: 6px;">
+                <button type="button" class="btn btn-secondary btn-sm" id="pointCameraToHotspotBtn"
+                  title="Inquadra l'hotspot nella vista" style="font-size: 11px; padding: 3px 8px;">🎯 Punta</button>
+                <button type="button" class="btn btn-secondary btn-sm" id="closeHotspotPropertiesBtn"
+                  title="Deseleziona hotspot" style="font-size: 11px; padding: 3px 8px;">✕</button>
               </div>
+            </div>
 
-              <div class="form-group">
-                <label class="form-label">Title</label>
-                <input
-                  type="text"
-                  id="hotspotTitle"
-                  class="form-input"
-                  placeholder="Hotspot title"
-                />
-              </div>
+            <div class="form-group">
+              <label class="form-label">Title</label>
+              <input type="text" id="hotspotTitle" class="form-input" placeholder="Hotspot title" />
+            </div>
 
-              <div class="form-group">
-                <label class="form-label">Description</label>
-                <textarea
-                  id="hotspotDescription"
-                  class="form-input form-textarea"
-                  placeholder="Optional description"
-                ></textarea>
-              </div>
+            <div class="form-group" id="hotspotDescriptionGroup" style="display: none;">
+              <label class="form-label">Description</label>
+              <textarea id="hotspotDescription" class="form-input form-textarea"
+                placeholder="Optional description"></textarea>
+            </div>
 
-              <div class="form-group" id="hotspotTargetGroup">
-                <label class="form-label">Target Scene</label>
-                <div style="display: flex; gap: 8px;">
-                  <select id="hotspotTarget" class="form-select" style="flex: 1;">
-                    <option value="">Select target scene...</option>
-                  </select>
-                  <button type="button" class="btn btn-secondary" id="hotspotGoToSceneBtn" title="Vai alla scena di destinazione" style="flex: 0 0 auto; white-space: nowrap; display: none;">➔ Vai</button>
-                </div>
-              </div>
-
-              <div class="form-group">
-                <label class="form-label">Interaction Type</label>
-                <select id="hotspotActionType" class="form-select">
-                  <option value="navigateTo">Standard (Click / Touch - Navigazione)</option>
-                  <option value="gazeNavigate">Gaze Navigation (Timer - Navigazione)</option>
-                  <option value="photo">Foto statica (Visualizza foto)</option>
+            <div class="form-group" id="hotspotTargetGroup">
+              <label class="form-label">Target Scene</label>
+              <div style="display: flex; gap: 8px;">
+                <select id="hotspotTarget" class="form-select" style="flex: 1;">
+                  <option value="">Select target scene...</option>
                 </select>
+                <button type="button" class="btn btn-secondary" id="hotspotGoToSceneBtn"
+                  title="Vai alla scena di destinazione" style="flex: 0 0 auto; white-space: nowrap; display: none;">➔
+                  Vai</button>
               </div>
+            </div>
 
-              <div class="form-group" id="hotspotGazeDurationGroup" style="display: none;">
-                <label class="form-label">Gaze Duration (ms)</label>
-                <input
-                  type="number"
-                  id="hotspotGazeDuration"
-                  class="form-input"
-                  value="3000"
-                  min="500"
-                  max="10000"
-                  step="100"
-                  placeholder="3000"
-                />
-              </div>
+            <div class="form-group">
+              <label class="form-label">Tipo Hotspot</label>
+              <select id="hotspotActionType" class="form-select">
+                <option value="gazeNavigate">Hotspot Gaze (Icona)</option>
+                <option value="gazeImage">Hotspot Gaze con Immagine</option>
+                <option value="photo">Immagine Statica (Titolo sopra)</option>
+              </select>
+            </div>
 
-              <div class="form-group" id="hotspotPhotoGroup" style="display: none;">
-                <label class="form-label">Foto Statica (PNG, JPEG, WebP)</label>
-                <input type="file" id="hotspotPhotoFile" accept="image/png, image/jpeg, image/webp" style="display: none;" />
-                <button type="button" class="btn btn-secondary" id="hotspotUploadPhotoBtn" style="width: 100%; margin-bottom: 8px;">
-                  📁 Carica foto dal PC
+            <div class="form-group" id="hotspotGazeDurationGroup" style="display: none;">
+              <label class="form-label">Gaze Duration (ms)</label>
+              <input type="number" id="hotspotGazeDuration" class="form-input" value="3000" min="500" max="10000"
+                step="100" placeholder="3000" />
+            </div>
+
+            <div class="form-group" id="hotspotPhotoGroup" style="display: none;">
+              <label class="form-label" id="hotspotPhotoLabel">Immagine / Foto (PNG, JPEG, WebP)</label>
+              <input type="file" id="hotspotPhotoFile" accept="image/png, image/jpeg, image/webp"
+                style="display: none;" />
+              <button type="button" class="btn btn-secondary" id="hotspotUploadPhotoBtn"
+                style="width: 100%; margin-bottom: 8px;">
+                📁 Carica foto dal PC
+              </button>
+              <input type="text" id="hotspotPhotoUrl" class="form-input" placeholder="https://... o incolla URL"
+                style="margin-bottom: 8px;" />
+              <div id="hotspotPhotoPreviewWrap"
+                style="display: none; text-align: center; background: rgba(0,0,0,0.2); padding: 8px; border-radius: 6px;">
+                <img id="hotspotPhotoPreview" src="" alt="Anteprima"
+                  style="max-width: 100%; max-height: 120px; object-fit: contain; border-radius: 4px; display: block; margin: 0 auto 6px auto;" />
+                <button type="button" class="btn btn-secondary btn-sm" id="hotspotPreviewPhotoBtn"
+                  style="width: 100%; font-size: 11px;">
+                  🔍 Visualizza in grande
                 </button>
-                <input
-                  type="text"
-                  id="hotspotPhotoUrl"
-                  class="form-input"
-                  placeholder="https://... o incolla URL"
-                  style="margin-bottom: 8px;"
-                />
-                <div id="hotspotPhotoPreviewWrap" style="display: none; text-align: center; background: rgba(0,0,0,0.2); padding: 8px; border-radius: 6px;">
-                  <img id="hotspotPhotoPreview" src="" alt="Anteprima" style="max-width: 100%; max-height: 120px; object-fit: contain; border-radius: 4px; display: block; margin: 0 auto 6px auto;" />
-                  <button type="button" class="btn btn-secondary btn-sm" id="hotspotPreviewPhotoBtn" style="width: 100%; font-size: 11px;">
-                    🔍 Visualizza in grande
-                  </button>
-                </div>
               </div>
+            </div>
 
-              <div class="form-group">
-                <label class="form-label">Color</label>
-                <div class="color-picker-group">
-                  <input
-                    type="color"
-                    id="hotspotColor"
-                    class="color-preview"
-                    value="#00ff00"
-                    style="
+            <div class="form-group">
+              <label class="form-label">Color</label>
+              <div class="color-picker-group">
+                <input type="color" id="hotspotColor" class="color-preview" value="#00ff00" style="
                       width: 40px;
                       height: 40px;
                       border: 2px solid var(--border-color);
                       border-radius: 6px;
                       cursor: pointer;
-                    "
-                  />
-                  <input
-                    type="text"
-                    class="form-input color-input"
-                    id="hotspotColorText"
-                    value="#00ff00"
-                    placeholder="#00ff00"
-                  />
-                </div>
+                    " />
+                <input type="text" class="form-input color-input" id="hotspotColorText" value="#00ff00"
+                  placeholder="#00ff00" />
               </div>
+            </div>
 
-              <div class="form-group" id="hotspotIconGroup">
-                <label class="form-label">Icon</label>
-                <div class="icon-grid" id="hotspotIconGrid">
-                  <!-- Icons will be dynamically populated from SenangStart icons.json -->
-                </div>
+            <div class="form-group" id="hotspotIconGroup">
+              <label class="form-label">Icon</label>
+              <div class="icon-grid" id="hotspotIconGrid">
+                <!-- Icons will be dynamically populated from SenangStart icons.json -->
               </div>
+            </div>
 
-              <div class="form-group" id="hotspotScaleGroup">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                  <label class="form-label" style="margin: 0;">Dimensione / Scala</label>
-                  <span id="hotspotScaleVal" style="font-size: 12px; font-weight: 600; color: var(--accent);">1.0x</span>
-                </div>
-                <div style="display: flex; align-items: center; gap: 8px;">
-                  <input
-                    type="range"
-                    id="hotspotScale"
-                    min="0.2"
-                    max="5.0"
-                    step="0.1"
-                    value="1.0"
-                    style="flex: 1;"
-                  />
-                  <input
-                    type="number"
-                    id="hotspotScaleNum"
-                    class="form-input"
-                    min="0.2"
-                    max="10.0"
-                    step="0.1"
-                    value="1.0"
-                    style="width: 70px; text-align: center; padding: 4px;"
-                  />
-                </div>
+            <div class="form-group" id="hotspotScaleGroup">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                <label class="form-label" style="margin: 0;">Dimensione / Scala</label>
+                <span id="hotspotScaleVal" style="font-size: 12px; font-weight: 600; color: var(--accent);">1.0x</span>
               </div>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <input type="range" id="hotspotScale" min="0.2" max="5.0" step="0.1" value="1.0" style="flex: 1;" />
+                <input type="number" id="hotspotScaleNum" class="form-input" min="0.2" max="10.0" step="0.1" value="1.0"
+                  style="width: 70px; text-align: center; padding: 4px;" />
+              </div>
+            </div>
 
-              <div class="form-group">
-                <label class="form-label">Position</label>
-                <div class="position-grid">
-                  <input
-                    type="number"
-                    id="hotspotPosX"
-                    class="form-input position-input"
-                    step="0.1"
-                    placeholder="X"
-                  />
-                  <input
-                    type="number"
-                    id="hotspotPosY"
-                    class="form-input position-input"
-                    step="0.1"
-                    placeholder="Y"
-                  />
-                  <input
-                    type="number"
-                    id="hotspotPosZ"
-                    class="form-input position-input"
-                    step="0.1"
-                    placeholder="Z"
-                  />
-                </div>
+            <div class="form-group">
+              <label class="form-label">Position</label>
+              <div class="position-grid">
+                <input type="number" id="hotspotPosX" class="form-input position-input" step="0.1" placeholder="X" />
+                <input type="number" id="hotspotPosY" class="form-input position-input" step="0.1" placeholder="Y" />
+                <input type="number" id="hotspotPosZ" class="form-input position-input" step="0.1" placeholder="Z" />
               </div>
             </div>
           </div>
+        </div>
 
-          <!-- Scene Tab Content -->
-          <div class="tab-content" id="sceneTab" style="display: none">
-            <div class="section">
-              <h3
-                style="
+        <!-- Scene Tab Content -->
+        <div class="tab-content" id="sceneTab" style="display: none">
+          <div class="section">
+            <h3 style="
                   font-size: 14px;
                   margin-bottom: 16px;
                   color: var(--text-secondary);
-                "
-              >
-                Scene Properties
-              </h3>
+                ">
+              Scene Properties
+            </h3>
 
-              <div class="form-group">
-                <label class="form-label">Scene Name</label>
-                <input
-                  type="text"
-                  id="sceneName"
-                  class="form-input"
-                  placeholder="Scene name"
-                />
-              </div>
+            <div class="form-group">
+              <label class="form-label">Scene Name</label>
+              <input type="text" id="sceneName" class="form-input" placeholder="Scene name" />
+            </div>
 
-              <div class="form-group">
-                <label class="form-label">Scene ID</label>
-                <input
-                  type="text"
-                  id="sceneId"
-                  class="form-input"
-                  placeholder="scene-id"
-                  readonly
-                />
-              </div>
+            <div class="form-group">
+              <label class="form-label">Scene ID</label>
+              <input type="text" id="sceneId" class="form-input" placeholder="scene-id" readonly />
+            </div>
 
-              <div class="form-group">
-                <label class="form-label">Image URL</label>
-                <input
-                  type="text"
-                  id="sceneImageUrl"
-                  class="form-input"
-                  placeholder="https://example.com/image.jpg"
-                />
-                <small
-                  style="
+            <div class="form-group">
+              <label class="form-label">Image URL</label>
+              <input type="text" id="sceneImageUrl" class="form-input" placeholder="https://example.com/image.jpg" />
+              <small style="
                     color: var(--text-muted);
                     margin-top: 4px;
                     display: block;
                     font-size: 11px;
-                  "
-                  >Enter a URL or keep the uploaded image data URL</small
-                >
-              </div>
+                  ">Enter a URL or keep the uploaded image data URL</small>
+            </div>
 
-              <div class="form-group">
-                <label class="form-label">Starting Position</label>
-                <div id="startingPositionDisplay" style="
+            <div class="form-group">
+              <label class="form-label">Starting Position</label>
+              <div id="startingPositionDisplay" style="
                   color: var(--text-muted);
                   font-size: 12px;
                   margin-bottom: 8px;
                 ">Not set (camera keeps current position)</div>
-                <div style="display: flex; gap: 8px;">
-                  <button type="button" class="btn btn-secondary" id="setStartingPosBtn" style="flex: 1;">
-                    Set Current View
-                  </button>
-                  <button type="button" class="btn btn-secondary" id="clearStartingPosBtn" style="flex: 0;">
-                    Clear
-                  </button>
-                </div>
-                <small
-                  style="
+              <div style="display: flex; gap: 8px;">
+                <button type="button" class="btn btn-secondary" id="setStartingPosBtn" style="flex: 1;">
+                  Set Current View
+                </button>
+                <button type="button" class="btn btn-secondary" id="clearStartingPosBtn" style="flex: 0;">
+                  Clear
+                </button>
+              </div>
+              <small style="
                     color: var(--text-muted);
                     margin-top: 4px;
                     display: block;
                     font-size: 11px;
-                  "
-                  >Camera will animate to this position when entering the scene</small
-                >
-              </div>
+                  ">Camera will animate to this position when entering the scene</small>
             </div>
           </div>
+        </div>
 
-          <!-- Tour Tab Content -->
-          <div class="tab-content" id="tourTab" style="display: none">
-            <div class="section">
-              <h3
-                style="
+        <!-- Tour Tab Content -->
+        <div class="tab-content" id="tourTab" style="display: none">
+          <div class="section">
+            <h3 style="
                   font-size: 14px;
                   margin-bottom: 16px;
                   color: var(--text-secondary);
-                "
-              >
-                Tour Settings
-              </h3>
+                ">
+              Tour Settings
+            </h3>
 
-              <div class="form-group">
-                <label class="form-label">Tour Title</label>
-                <input
-                  type="text"
-                  id="tourTitle"
-                  class="form-input"
-                  placeholder="My Virtual Tour"
-                />
-              </div>
+            <div class="form-group">
+              <label class="form-label">Tour Title</label>
+              <input type="text" id="tourTitle" class="form-input" placeholder="My Virtual Tour" />
+            </div>
 
-              <div class="form-group">
-                <label class="form-label">Description</label>
-                <textarea
-                  id="tourDescription"
-                  class="form-input form-textarea"
-                  placeholder="Tour description"
-                ></textarea>
-              </div>
+            <div class="form-group">
+              <label class="form-label">Description</label>
+              <textarea id="tourDescription" class="form-input form-textarea" placeholder="Tour description"></textarea>
+            </div>
 
-              <div class="form-group">
-                <label class="form-label">Initial Scene</label>
-                <select id="tourInitialScene" class="form-select">
-                  <option value="">Select initial scene...</option>
-                </select>
-              </div>
+            <div class="form-group">
+              <label class="form-label">Initial Scene</label>
+              <select id="tourInitialScene" class="form-select">
+                <option value="">Select initial scene...</option>
+              </select>
             </div>
           </div>
         </div>
-      </aside>
-    </main>
+      </div>
+    </aside>
+  </main>
 
-    <!-- Hidden file inputs -->
-    <input
-      type="file"
-      id="sceneUpload"
-      accept="image/*"
-      multiple
-      style="display: none"
-    />
-    <input type="file" id="importUpload" accept=".json" style="display: none" />
+  <!-- Hidden file inputs -->
+  <input type="file" id="sceneUpload" accept="image/*" multiple style="display: none" />
+  <input type="file" id="importUpload" accept=".json" style="display: none" />
 
-    <!-- Toast Notification -->
-    <div class="toast" id="toast"></div>
+  <!-- Toast Notification -->
+  <div class="toast" id="toast"></div>
 
-    <!-- Export Modal -->
-    <div class="modal" id="exportModal">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h3>Export Tour</h3>
-          <button class="modal-close">&times;</button>
+  <!-- Export Modal -->
+  <div class="modal" id="exportModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Export Tour</h3>
+        <button class="modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p>Your tour is ready to export. Choose an export option:</p>
+        <div class="export-info">
+          <p>
+            <strong>JSON Only:</strong> Export tour configuration (for use
+            with SWT library)
+          </p>
+          <p>
+            <strong>Viewer HTML:</strong> Export standalone HTML viewer with
+            embedded configuration
+          </p>
         </div>
-        <div class="modal-body">
-          <p>Your tour is ready to export. Choose an export option:</p>
-          <div class="export-info">
-            <p>
-              <strong>JSON Only:</strong> Export tour configuration (for use
-              with SWT library)
-            </p>
-            <p>
-              <strong>Viewer HTML:</strong> Export standalone HTML viewer with
-              embedded configuration
-            </p>
-          </div>
-          <textarea
-            id="exportPreview"
-            class="export-preview"
-            readonly
-          ></textarea>
-        </div>
-        <div class="modal-footer">
-          <button id="copyJsonBtn" class="btn btn-secondary">Copy JSON</button>
-          <button id="exportJsonBtn" class="btn btn-primary">
-            Download JSON
-          </button>
-          <button id="exportViewerBtn" class="btn btn-success">
-            Export Viewer HTML
-          </button>
-        </div>
+        <textarea id="exportPreview" class="export-preview" readonly></textarea>
+      </div>
+      <div class="modal-footer">
+        <button id="copyJsonBtn" class="btn btn-secondary">Copy JSON</button>
+        <button id="exportJsonBtn" class="btn btn-primary">
+          Download JSON
+        </button>
+        <button id="exportViewerBtn" class="btn btn-success">
+          Export Viewer HTML
+        </button>
       </div>
     </div>
+  </div>
 
-    <!-- Scripts -->
-    <script src="../dist/swt-editor.js"></script>
-  </body>
+  <!-- Scripts -->
+  <script src="../dist/swt-editor.js"></script>
+</body>
+
 </html>

@@ -147,6 +147,31 @@ export class GazeManager {
     this.startTime = performance.now();
     this.hasTriggered = false;
 
+    const isGazeImage = hotspotData?.action?.type === 'gazeImage' || hotspotData?.type === 'gazeImage';
+    if (isGazeImage) {
+      this.currentVisualEl = el.tagName?.toLowerCase() === 'a-image' ? el : (el.querySelector('a-image') || el);
+      const rawScale = this.currentVisualEl?.getAttribute?.('scale');
+      let sx = 1, sy = 1, sz = 1;
+      if (typeof rawScale === 'string') {
+        const parts = rawScale.trim().split(/\s+/).map(Number);
+        if (parts.length > 0 && isFinite(parts[0])) {
+          sx = parts[0];
+          sy = parts[1] ?? sx;
+          sz = parts[2] ?? sx;
+        }
+      } else if (typeof rawScale === 'number' && isFinite(rawScale)) {
+        sx = sy = sz = rawScale;
+      } else if (rawScale && typeof rawScale === 'object') {
+        sx = rawScale.x ?? 1;
+        sy = rawScale.y ?? 1;
+        sz = rawScale.z ?? 1;
+      }
+      this.initialScale = { x: sx, y: sy, z: sz };
+    } else {
+      this.currentVisualEl = null;
+      this.initialScale = null;
+    }
+
     // Reset and prepare visual progress indicator
     this.ensureProgressIndicator();
     this.setProgress(0, hotspotData.appearance?.color);
@@ -197,6 +222,16 @@ export class GazeManager {
       // Update circular indicator
       this.setProgress(progress, this.currentHotspotData?.appearance?.color);
 
+      // If Gaze Image hotspot: animate image scaling up smoothly to occupy the entire view
+      if (this.currentVisualEl && this.initialScale) {
+        const ease = Math.pow(progress, 1.8);
+        const multiplier = 1 + 24 * ease;
+        this.currentVisualEl.setAttribute(
+          'scale',
+          `${(this.initialScale.x * multiplier).toFixed(4)} ${(this.initialScale.y * multiplier).toFixed(4)} ${(this.initialScale.z * multiplier).toFixed(4)}`
+        );
+      }
+
       // If duration reached and navigation not yet triggered
       if (progress >= 1 && !this.hasTriggered) {
         this.hasTriggered = true;
@@ -210,6 +245,19 @@ export class GazeManager {
     };
 
     this.animationFrameId = requestAnimFrame(tick);
+  }
+
+  /**
+   * Restores initial scale of gaze image hotspot if it was being animated
+   */
+  restoreGazeImageScale() {
+    if (this.currentVisualEl && this.initialScale) {
+      try {
+        this.currentVisualEl.setAttribute('scale', `${this.initialScale.x} ${this.initialScale.y} ${this.initialScale.z}`);
+      } catch (e) {}
+    }
+    this.currentVisualEl = null;
+    this.initialScale = null;
   }
 
   /**
@@ -241,15 +289,6 @@ export class GazeManager {
       sceneId: currentSceneId
     });
 
-    const isPhoto = hotspotData.action?.type === 'photo' || hotspotData.type === 'photo';
-    if (isPhoto) {
-      this.resetProgress();
-      if (this.tour && typeof this.tour.openPhotoModal === 'function') {
-        this.tour.openPhotoModal(hotspotData.action, hotspotData);
-      }
-      return;
-    }
-
     const targetSceneId = hotspotData.action?.target;
     if (targetSceneId) {
       this.isNavigating = true;
@@ -258,9 +297,11 @@ export class GazeManager {
         console.error('Gaze navigation failed:', err);
       }).finally(() => {
         this.isNavigating = false;
+        this.restoreGazeImageScale();
       });
     } else {
       this.resetProgress();
+      this.restoreGazeImageScale();
     }
   }
 
@@ -285,6 +326,7 @@ export class GazeManager {
       this.animationFrameId = null;
     }
 
+    this.restoreGazeImageScale();
     this.resetProgress();
 
     this.currentHotspotEl = null;
@@ -351,21 +393,26 @@ export class GazeManager {
 
 /**
  * Checks whether a hotspot is configured as a Gaze Navigation hotspot.
+ * Only navigation hotspots (gazeNavigate, gazeImage) are gaze hotspots.
+ * Static photos/images are not gaze hotspots.
  * @param {Object} hotspot
  * @param {Object} [tourConfig] - Optional tour configuration to check global gaze settings
  * @returns {boolean}
  */
 export function isGazeHotspot(hotspot, tourConfig = null) {
   if (!hotspot) return false;
+  const actionType = hotspot.action?.type || hotspot.type;
+  if (actionType === 'photo' || actionType === 'image') {
+    return false;
+  }
   if (tourConfig?.settings?.gazeNavigation || tourConfig?.settings?.gazeForAll) {
     return true;
   }
   return (
-    hotspot.action?.type === 'gazeNavigate' ||
-    hotspot.action?.type === 'gaze' ||
-    hotspot.action?.type === 'gazePhoto' ||
-    hotspot.type === 'gazeNavigate' ||
-    hotspot.type === 'gaze' ||
+    actionType === 'gazeNavigate' ||
+    actionType === 'gazeImage' ||
+    actionType === 'gaze' ||
+    actionType === 'gazePhoto' ||
     hotspot.action?.gaze === true ||
     hotspot.gaze === true
   );

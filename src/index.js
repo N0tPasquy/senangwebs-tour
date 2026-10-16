@@ -393,7 +393,13 @@ class Tour {
    */
   handleAction(action, hotspotData = null) {
     switch (action.type) {
+      case "gazeNavigate":
+      case "gazeImage":
+        // Handled exclusively by GazeManager on gaze countdown completion
+        break;
+
       case "navigateTo":
+        // Legacy fallback only if explicit target exists
         if (action.target) {
           this.navigateTo(action.target).catch((err) => {
             console.error("Navigation failed:", err);
@@ -401,13 +407,9 @@ class Tour {
         }
         break;
 
-      case "gazeNavigate":
-        // Handled exclusively by GazeManager on gaze countdown completion
-        break;
-
       case "photo":
       case "image":
-        this.openPhotoModal(action, hotspotData);
+        // Static photos are non-clickable and display their title in 3D without modal
         break;
 
       default:

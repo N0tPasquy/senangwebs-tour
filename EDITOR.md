@@ -250,31 +250,10 @@ editor.render(); // Update UI
 
 ### Custom Hotspot Placement
 
-The editor supports three distinct hotspot action types:
+The editor supports three distinct hotspot action types designed for hands-free VR headset viewing:
 
-#### 1. Classic Click Navigation (`navigateTo`)
-```javascript
-const navHotspot = {
-  id: "hotspot-nav-1",
-  position: { x: 5, y: 1.5, z: -3 },
-  action: {
-    type: "navigateTo",
-    target: "scene-kitchen",
-  },
-  appearance: {
-    color: "#ff0000",
-    scale: 1.2,
-    icon: "arrow-right",
-  },
-  tooltip: {
-    text: "Vai alla Cucina",
-  },
-};
-editor.addHotspot(navHotspot);
-```
-
-#### 2. Gaze Navigation (`gazeNavigate`)
-Hands-free VR navigation: holding the crosshair on the hotspot displays an animated countdown ring that automatically triggers navigation upon timer completion.
+#### 1. Gaze Navigation (`gazeNavigate`)
+Hands-free VR navigation with icon: holding the crosshair on the hotspot displays an animated countdown ring that automatically triggers navigation upon timer completion.
 ```javascript
 const gazeHotspot = {
   id: "hotspot-gaze-1",
@@ -296,25 +275,45 @@ const gazeHotspot = {
 editor.addHotspot(gazeHotspot);
 ```
 
-#### 3. Static Photo Hotspot (`photo`)
-Embeds photos in 3D space respecting their original aspect ratio. Clicking opens a full-screen accessible modal dialog.
+#### 2. Gaze Image Hotspot (`gazeImage`)
+Hands-free VR navigation using a custom uploaded image instead of an icon. As the user gazes at the hotspot, the photo smoothly scales up over the duration to fill the entire view before transitioning seamlessly into the next scene.
+```javascript
+const gazeImageHotspot = {
+  id: "hotspot-gaze-img-1",
+  position: { x: 3, y: 0.5, z: -4 },
+  action: {
+    type: "gazeImage",
+    target: "scene-garden",
+    duration: 3000, // Duration in ms
+    url: "https://example.com/garden-preview.jpg", // Image displayed and expanded
+  },
+  appearance: {
+    scale: 1.5,
+    aspectRatio: 1.778, // Native aspect ratio
+  },
+  tooltip: {
+    text: "Verso il Giardino",
+  },
+};
+editor.addHotspot(gazeImageHotspot);
+```
+
+#### 3. Static Photo (`photo`)
+Embeds non-clickable photos in 3D space respecting their original aspect ratio, with the title displayed directly above the image in 3D. Non-interactive in VR viewer (no description, no modal).
 ```javascript
 const photoHotspot = {
   id: "hotspot-photo-1",
   position: { x: 0, y: 1.0, z: -5 },
   action: {
     type: "photo",
-    url: "https://example.com/artwork-hd.jpg", // High-res image for modal
-    title: "Dipinto Rinascimentale",
-    description: "Olio su tela realizzato nel 1504, esposto nella galleria principale.",
+    url: "https://example.com/artwork-hd.jpg",
   },
   appearance: {
-    icon: "data:image/jpeg;base64,...", // Lightweight thumbnail for 3D billboard
     scale: 1.8,
     aspectRatio: 1.778, // Preserves 16:9 native aspect ratio in 3D
   },
   tooltip: {
-    text: "Dipinto Rinascimentale",
+    text: "Dipinto Rinascimentale", // Displayed floating directly above the image in 3D
   },
 };
 editor.addHotspot(photoHotspot);

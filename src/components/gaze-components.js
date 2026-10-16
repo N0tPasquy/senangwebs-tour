@@ -162,6 +162,100 @@ if (typeof AFRAME !== 'undefined') {
   });
 
   /**
+   * Component for static photos in 3D scene.
+   * Shows the floating title ONLY when the element is focused by the reticle/cursor.
+   */
+  AFRAME.registerComponent('swt-static-photo', {
+    schema: {
+      titleId: { type: 'string', default: '' },
+      hotspotData: { type: 'string', default: '{}' }
+    },
+
+    init: function () {
+      this.onEnter = this.onEnter.bind(this);
+      this.onLeave = this.onLeave.bind(this);
+      this.onClick = this.onClick.bind(this);
+      this.titleEl = null;
+      this.isFocused = false;
+    },
+
+    play: function () {
+      this.el.addEventListener('mouseenter', this.onEnter);
+      this.el.addEventListener('mouseleave', this.onLeave);
+      this.el.addEventListener('raycaster-intersected', this.onEnter);
+      this.el.addEventListener('raycaster-intersected-cleared', this.onLeave);
+      this.el.addEventListener('click', this.onClick);
+    },
+
+    pause: function () {
+      this.el.removeEventListener('mouseenter', this.onEnter);
+      this.el.removeEventListener('mouseleave', this.onLeave);
+      this.el.removeEventListener('raycaster-intersected', this.onEnter);
+      this.el.removeEventListener('raycaster-intersected-cleared', this.onLeave);
+      this.el.removeEventListener('click', this.onClick);
+      this.handleLeave();
+    },
+
+    remove: function () {
+      this.handleLeave();
+    },
+
+    getTitleEl: function () {
+      if (!this.titleEl && this.data.titleId) {
+        this.titleEl =
+          (this.el.parentNode && this.el.parentNode.querySelector(`#${this.data.titleId}`)) ||
+          (this.el.sceneEl && this.el.sceneEl.querySelector(`#${this.data.titleId}`)) ||
+          (typeof document !== 'undefined' && document.getElementById(this.data.titleId));
+      }
+      return this.titleEl;
+    },
+
+    handleEnter: function () {
+      if (this.isFocused) return;
+      this.isFocused = true;
+      const title = this.getTitleEl();
+      if (title) {
+        title.setAttribute('visible', 'true');
+      }
+    },
+
+    handleLeave: function () {
+      if (!this.isFocused) return;
+      this.isFocused = false;
+      const title = this.getTitleEl();
+      if (title) {
+        title.setAttribute('visible', 'false');
+      }
+    },
+
+    onEnter: function (evt) {
+      const cursorEl = evt?.detail?.cursorEl;
+      if (cursorEl && (cursorEl.id === 'swt-mouse-cursor' || cursorEl.getAttribute?.('cursor')?.rayOrigin === 'mouse')) {
+        return;
+      }
+      this.handleEnter();
+    },
+
+    onLeave: function (evt) {
+      const cursorEl = evt?.detail?.cursorEl;
+      if (cursorEl && (cursorEl.id === 'swt-mouse-cursor' || cursorEl.getAttribute?.('cursor')?.rayOrigin === 'mouse')) {
+        return;
+      }
+      this.handleLeave();
+    },
+
+    onClick: function () {
+      // In editor mode, allow clicking to select the photo in editor panel
+      try {
+        const hotspotData = JSON.parse(this.data.hotspotData);
+        if (this.el.sceneEl) {
+          this.el.sceneEl.emit('swt-hotspot-clicked', { hotspotData });
+        }
+      } catch (e) {}
+    }
+  });
+
+  /**
    * Component for the circular gaze progress indicator around the central reticle/cursor.
    */
   AFRAME.registerComponent('swt-gaze-progress', {
