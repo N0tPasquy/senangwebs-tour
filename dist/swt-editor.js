@@ -5693,8 +5693,13 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>${title}</title>
-    <!-- SWT Library: try local relative path first, fallback to CDN -->
-    <script src="../dist/swt.min.js"></script>
+    <!-- SWT Library: try same folder first (for web hosting / Altervista), then ../dist/ (local dev), then CDN -->
+    <script src="swt.min.js"></script>
+    <script>
+      if (typeof SWT === "undefined") {
+        document.write('<script src="../dist/swt.min.js"><\\/script>');
+      }
+    </script>
     <script>
       if (typeof SWT === "undefined") {
         document.write(
@@ -5704,7 +5709,7 @@
     </script>
   </head>
   <body>
-    <a-scene id="tour-container">
+    <a-scene id="tour-container" loading-screen="enabled: false">
       <a-camera look-controls>
         <a-cursor fuse="false" cursor="fuse: false; fuseTimeout: 0;" raycaster="objects: .clickable;"></a-cursor>
       </a-camera>
@@ -5718,12 +5723,22 @@
         .map((line, i) => (i === 0 ? line : "      " + line))
         .join("\n")};
 
-      // Initialize tour when scene is loaded
+      // Initialize tour when scene is loaded (handling both already-loaded and pending load)
       const sceneEl = document.querySelector("#tour-container");
-      sceneEl.addEventListener("loaded", () => {
+      function startTour() {
+        if (typeof SWT === "undefined" || !SWT.Tour) {
+          setTimeout(startTour, 30);
+          return;
+        }
         const tour = new SWT.Tour(sceneEl, tourConfig);
         tour.start();
-      });
+      }
+
+      if (sceneEl.hasLoaded) {
+        startTour();
+      } else {
+        sceneEl.addEventListener("loaded", startTour);
+      }
     </script>
   </body>
 </html>`;
