@@ -38,6 +38,7 @@ A powerful, data-driven 360° virtual tour system built on A-Frame WebVR. Create
 - **Gaze Navigation Hotspots** - Automatic navigation upon holding gaze on an icon hotspot with animated circular countdown ring
 - **Gaze Image Hotspots** - Immersive navigation hotspots displaying a custom photo that zooms in over the gaze duration to fill the view, transitioning into the next scene
 - **Static 3D Photos & In-Scene Cards** - Photos placed in 3D space with native aspect ratio; hands-free VR "In grande" 3D card view (photo on left, title & description on right, close 'X' with 2-second gaze countdown)
+- **Background Audio Loop** - Seamless looping ambient audio track with a comfortable scaled volume ceiling (35% maximum output for non-intrusive listening), live volume adjustments, and automatic autoplay policy unlocking on user interaction
 - **Dynamic Hotspot Scaling** - Scale hotspots and photos with proportional title position and dimension adjustment
 - **Customizable Hotspots** - Custom icons, colors, scales, and title text
 - **Multiple Export Formats** - JSON configuration or standalone HTML files
@@ -296,6 +297,11 @@ Both the editor and viewer use the same data format. Scenes are stored as an **a
 {
   initialScene: "scene-id",       // Required: Starting scene ID
   cursor: ".custom-cursor",        // Optional: Cursor selector or false to disable
+  audio: {                         // Optional: Background audio configuration
+    url: "ambient.mp3",            // Required: Audio URL or base64 data URL
+    volume: 0.5,                   // Optional: Baseline volume (0.0 to 1.0, default: 0.5)
+    loop: true                     // Optional: Loop playback continuously (default: true)
+  },
   scenes: [                        // Required: Array of scenes
     {
       id: "scene-id",              // Required: Scene identifier
@@ -347,6 +353,7 @@ Both the editor and viewer use the same data format. Scenes are stored as an **a
 - `scenes` is an **array** (not an object)
 - The library also accepts `scenes` as an object keyed by ID for backward compatibility
 - Hotspot `position` is in 3D space (typically on 10-unit sphere surface)
+- `audio.volume` represents baseline volume (`0.0`–`1.0`, default `0.5`). To guarantee a comfortable, non-intrusive ambient background soundtrack, the runtime scales actual output volume by `0.35` (`actualOutputVolume = volume * 0.35`). For example, 100% slider outputs 35% actual volume, and 50% default outputs 17.5% volume.
 
 ---
 
@@ -447,6 +454,102 @@ tour.openPhotoModal({
 ##### `tour.closePhotoModal()`
 
 Close the active photo modal dialog and clean up DOM listeners.
+
+**Returns:** `void`
+
+---
+
+##### `tour.playAudio()`
+
+Play or resume the looping background audio. Resolves when audio playback begins. If playback is blocked by browser autoplay policy, it automatically starts upon the user's first touch, click, or key press.
+
+**Returns:** `Promise<void>`
+
+**Example:**
+
+```javascript
+tour.playAudio().catch((err) => {
+  console.log("Autoplay waiting for user gesture:", err);
+});
+```
+
+---
+
+##### `tour.pauseAudio()`
+
+Pause background audio playback.
+
+**Returns:** `void`
+
+**Example:**
+
+```javascript
+tour.pauseAudio();
+```
+
+---
+
+##### `tour.stopAudio()`
+
+Stop background audio playback and rewind to the start (`currentTime = 0`).
+
+**Returns:** `void`
+
+**Example:**
+
+```javascript
+tour.stopAudio();
+```
+
+---
+
+##### `tour.setAudioVolume(volume)`
+
+Adjust background audio volume dynamically. The value is clamped between `0.0` and `1.0`, and output volume is scaled relative to the 35% maximum output ceiling.
+
+**Parameters:**
+
+- `volume` (Number) - Baseline volume level between `0.0` (mute) and `1.0` (35% maximum output)
+
+**Returns:** `void`
+
+**Example:**
+
+```javascript
+tour.setAudioVolume(0.5); // Sets actual volume to 0.5 * 0.35 = 0.175
+```
+
+---
+
+##### `tour.setAudio(audioConfig)`
+
+Dynamically update or replace the background audio configuration. Replaces track, restarts playback if already playing, or removes audio completely if passed `null`.
+
+**Parameters:**
+
+- `audioConfig` (Object|null) - Object with `{ url, volume, loop }`, or `null` to remove audio
+
+**Returns:** `void`
+
+**Example:**
+
+```javascript
+// Replace track
+tour.setAudio({
+  url: "assets/new-ambient.mp3",
+  volume: 0.5,
+  loop: true
+});
+
+// Remove audio
+tour.setAudio(null);
+```
+
+---
+
+##### `tour.cleanupAudio()`
+
+Stop playback, release audio resources, and remove autoplay unlock event listeners.
 
 **Returns:** `void`
 
@@ -604,6 +707,7 @@ setTimeout(() => {
 - **Smart Deselection** - Deselect hotspots by clicking empty sky or toggling the sidebar list item
 - **Protected Editor Mode** - Gaze countdowns and automatic navigation are safely deactivated in editor preview to prevent accidental scene changes while authoring
 - **Manual "Go" Navigation** - Explicit `➔ Go` button in the sidebar to test scene transitions on demand
+- **Background Audio Track** - Upload audio tracks (MP3/WAV/OGG converted to Base64 data URLs) or link external audio stream URLs. Includes a live volume slider (0% to 100%, defaulting to 50%), real-time percentage readout, one-click track removal, and automatic preview audio playback (plays when previewing, pauses on preview exit or Escape)
 
 ### Hotspot Configuration & Types
 

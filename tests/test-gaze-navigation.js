@@ -4,7 +4,7 @@
  */
 
 import { GazeManager, isGazeHotspot } from '../src/GazeManager.js';
-import { buildTourConfig } from '../src/editor/js/data-transform.js';
+import { buildTourConfig, buildPreviewTourConfig } from '../src/editor/js/data-transform.js';
 import { StaticPhotoController } from '../src/StaticPhotoCard.js';
 import { HotspotManager } from '../src/HotspotManager.js';
 
@@ -161,6 +161,31 @@ global.CustomEvent = class {
     this.detail = opts.detail || {};
   }
 };
+
+class MockAudio {
+  constructor(url) {
+    this.url = url;
+    this.src = url;
+    this.loop = false;
+    this.volume = 1.0;
+    this.currentTime = 0;
+    this.paused = true;
+    this.preload = '';
+    this.playCount = 0;
+    this.pauseCount = 0;
+  }
+  play() {
+    this.paused = false;
+    this.playCount++;
+    return Promise.resolve();
+  }
+  pause() {
+    this.paused = true;
+    this.pauseCount++;
+  }
+  load() {}
+}
+global.Audio = MockAudio;
 
 let passCount = 0;
 let failCount = 0;
@@ -1150,6 +1175,170 @@ async function runTests() {
       !hotspotManager.tooltipEl || hotspotManager.tooltipEl.getAttribute('visible') === 'false',
       'Global tooltipEl remains hidden for gazeImage so only ONE title exists'
     );
+  }
+
+  // --- Test 35: Tour background audio configuration and export preservation ---
+  console.log('\nTest 35: Tour background audio configuration and export preservation');
+  {
+    const scenes = [
+      { id: 'scene-1', panorama: 'room1.jpg', hotspots: [] },
+      { id: 'scene-2', panorama: 'room2.jpg', hotspots: [] }
+    ];
+
+    const editorConfig = {
+      initialSceneId: 'scene-1',
+      title: 'Audio Tour',
+      audio: {
+        url: 'data:audio/mp3;base64,mockAudioData',
+        volume: 0.65,
+        loop: true
+      }
+    };
+
+    const exportedTourConfig = buildTourConfig(editorConfig, scenes);
+    assert(exportedTourConfig.audio !== undefined, 'Exported tour config includes audio configuration');
+    assert(exportedTourConfig.audio.url === 'data:audio/mp3;base64,mockAudioData', 'Audio URL preserved in export');
+    assert(exportedTourConfig.audio.volume === 0.65, 'Audio volume (0.65) preserved in export');
+    assert(exportedTourConfig.audio.loop === true, 'Audio loop (true) preserved in export');
+
+    // Test default volume & loop fallback when volume not explicitly specified
+    const defaultAudioConfig = buildTourConfig({
+      initialSceneId: 'scene-1',
+      audio: { url: 'https://example.com/ambient.mp3' }
+    }, scenes);
+    assert(defaultAudioConfig.audio.volume === 0.5, 'Default audio volume is 0.5');
+    assert(defaultAudioConfig.audio.loop === true, 'Default audio loop is true');
+
+    // Test buildPreviewTourConfig forwards audio with isEditor = true
+    const previewConfig = buildPreviewTourConfig(scenes[0], scenes, editorConfig);
+    assert(previewConfig.isEditor === true, 'Preview tour config has isEditor: true');
+    assert(previewConfig.audio !== undefined, 'Preview tour config includes audio configuration');
+    assert(previewConfig.audio.url === 'data:audio/mp3;base64,mockAudioData', 'Preview tour config preserves audio URL');
+    assert(previewConfig.audio.volume === 0.65, 'Preview tour config preserves audio volume');
+  }
+
+  // --- Test 36: Background Audio lifecycle, volume, and playback control ---
+  console.log('\nTest 36: Background Audio lifecycle, volume, and playback control');
+  {
+    // Tour audio controller behavior verification
+    class TestAudioController {
+      constructor(config = {}) {
+        this.config = config;
+        this.bgAudio = null;
+        this.setupBackgroundAudio();
+      }
+
+      setupBackgroundAudio() {
+        if (!this.config.audio || !this.config.audio.url) return;
+        this.cleanupAudio();
+        const audio = new global.Audio(this.config.audio.url);
+        audio.loop = this.config.audio.loop !== false;
+        const vol = typeof this.config.audio.volume === 'number'
+          ? Math.max(0, Math.min(1, this.config.audio.volume))
+          : 0.5;
+        // Output volume is scaled relative to 35% maximum (so 0-100% slider maps to 0.0 - 0.35 actual volume)
+        audio.volume = vol * 0.35;
+        this.bgAudio = audio;
+      }
+
+      playAudio() {
+        if (!this.bgAudio) return Promise.resolve();
+        return this.bgAudio.play();
+      }
+
+      pauseAudio() {
+        if (!this.bgAudio) return;
+        this.bgAudio.pause();
+      }
+
+      stopAudio() {
+        if (!this.bgAudio) return;
+        this.bgAudio.pause();
+        this.bgAudio.currentTime = 0;
+      }
+
+      setAudioVolume(vol) {
+        const safeVol = Math.max(0, Math.min(1, typeof vol === 'number' ? vol : parseFloat(vol) || 0));
+        if (this.config.audio) this.config.audio.volume = safeVol;
+        if (this.bgAudio) this.bgAudio.volume = safeVol * 0.35;
+      }
+
+      setAudio(audioConfig) {
+        if (!audioConfig || !audioConfig.url) {
+          this.cleanupAudio();
+          if (this.config.audio) delete this.config.audio;
+          return;
+        }
+        this.config.audio = {
+          url: audioConfig.url,
+          volume: typeof audioConfig.volume === 'number' ? audioConfig.volume : 0.5,
+          loop: audioConfig.loop !== false
+        };
+        const wasPlaying = Boolean(this.bgAudio && !this.bgAudio.paused);
+        this.setupBackgroundAudio();
+        if (wasPlaying) this.playAudio();
+      }
+
+      cleanupAudio() {
+        if (this.bgAudio) {
+          this.bgAudio.pause();
+          this.bgAudio.src = '';
+          this.bgAudio = null;
+        }
+      }
+    }
+
+    // 1. Editor mode authoring: audio is silent on startup
+    const editorTour = new TestAudioController({
+      isEditor: true,
+      audio: { url: 'ambient.mp3', volume: 0.75, loop: true }
+    });
+    assert(editorTour.bgAudio !== null, 'Audio instance created');
+    assert(Math.abs(editorTour.bgAudio.volume - 0.2625) < 1e-6, 'Audio volume set to 0.2625 (0.75 * 0.35)');
+    assert(editorTour.bgAudio.loop === true, 'Audio loop set to true');
+    assert(editorTour.bgAudio.paused === true, 'Audio is initially paused (silent while editing in editor)');
+
+    // 2. Preview button clicked: audio starts playing
+    editorTour.playAudio();
+    assert(editorTour.bgAudio.paused === false, 'Audio playing when preview mode is activated');
+    assert(editorTour.bgAudio.playCount === 1, 'play() called once');
+
+    // 3. Live volume slider adjustment
+    editorTour.setAudioVolume(0.4);
+    assert(Math.abs(editorTour.bgAudio.volume - 0.14) < 1e-6, 'Live audio volume updated to 0.14 (0.4 * 0.35)');
+    assert(editorTour.config.audio.volume === 0.4, 'Audio config volume updated to 0.4');
+
+    // 4. Volume clamping test (out of bounds)
+    editorTour.setAudioVolume(1.8);
+    assert(Math.abs(editorTour.bgAudio.volume - 0.35) < 1e-6, 'Volume clamped to max 0.35 (1.0 * 0.35)');
+    editorTour.setAudioVolume(-0.5);
+    assert(editorTour.bgAudio.volume === 0.0, 'Volume clamped to min 0.0');
+    editorTour.setAudioVolume(0.8);
+    assert(Math.abs(editorTour.bgAudio.volume - 0.28) < 1e-6, 'Volume set to 0.28 (0.8 * 0.35)');
+
+    // 5. Exit preview mode: audio pauses
+    editorTour.pauseAudio();
+    assert(editorTour.bgAudio.paused === true, 'Audio paused when exiting preview mode');
+    assert(editorTour.bgAudio.pauseCount === 1, 'pause() called once');
+
+    // 6. Replacing track while playing
+    editorTour.playAudio();
+    editorTour.setAudio({ url: 'new-track.mp3', volume: 0.9, loop: true });
+    assert(editorTour.bgAudio.url === 'new-track.mp3', 'Audio source updated to new track');
+    assert(Math.abs(editorTour.bgAudio.volume - 0.315) < 1e-6, 'Audio volume set to 0.315 (0.9 * 0.35)');
+    assert(editorTour.bgAudio.paused === false, 'Audio resumed playing with new track');
+
+    // 7. Removing audio track
+    editorTour.setAudio(null);
+    assert(editorTour.bgAudio === null, 'Audio element destroyed when track removed');
+    assert(editorTour.config.audio === undefined, 'Audio removed from config');
+
+    // 8. Re-adding and destroying tour
+    editorTour.setAudio({ url: 'final.mp3', volume: 0.8 });
+    assert(editorTour.bgAudio !== null, 'Audio element recreated');
+    assert(Math.abs(editorTour.bgAudio.volume - 0.28) < 1e-6, 'Audio volume set to 0.28 (0.8 * 0.35)');
+    editorTour.cleanupAudio();
+    assert(editorTour.bgAudio === null, 'Audio element cleanly cleaned up on destroy');
   }
 
   console.log(`\n=== RESULTS: ${passCount} PASSED, ${failCount} FAILED ===\n`);

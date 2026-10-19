@@ -53,6 +53,22 @@ class ExportManager {
         this.editor.config.initialSceneId = scenes[0].id;
       }
 
+      if (tourData.title) {
+        this.editor.config.title = tourData.title;
+      }
+      if (tourData.description) {
+        this.editor.config.description = tourData.description;
+      }
+      if (tourData.audio && tourData.audio.url) {
+        this.editor.config.audio = {
+          url: tourData.audio.url,
+          volume: typeof tourData.audio.volume === 'number' ? tourData.audio.volume : 0.5,
+          loop: tourData.audio.loop !== false
+        };
+      } else {
+        delete this.editor.config.audio;
+      }
+
       // Reset preview and selection state so the new project renders cleanly
       this.editor.hotspotEditor.currentHotspotIndex = -1;
       this.editor.lastRenderedSceneIndex = -1;

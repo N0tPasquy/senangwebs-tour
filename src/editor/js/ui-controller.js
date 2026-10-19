@@ -640,6 +640,58 @@ class UIController {
     const tourInitialScene = this.getEl("tourInitialScene");
     if (tourInitialScene) tourInitialScene.value = config.initialSceneId || "";
 
+    // Background audio properties
+    const audioUrl = config.audio?.url || "";
+    const audioUrlInput = this.getEl("tourAudioUrl");
+    const removeAudioBtn = this.getEl("tourRemoveAudioBtn");
+    const audioVolumeGroup = this.getEl("tourAudioVolumeGroup");
+    const audioStatus = this.getEl("tourAudioStatus");
+    const volumeSlider = this.getEl("tourAudioVolume");
+    const volumeVal = this.getEl("tourAudioVolumeVal");
+
+    const rawVolume = typeof config.audio?.volume === "number" ? config.audio.volume : 0.5;
+    const volumePercent = Math.round(rawVolume * 100);
+
+    if (volumeSlider) {
+      volumeSlider.value = rawVolume;
+    }
+    if (volumeVal) {
+      volumeVal.textContent = `${volumePercent}%`;
+    }
+
+    if (audioUrl) {
+      if (audioUrlInput) {
+        if (audioUrl.startsWith("data:")) {
+          audioUrlInput.value = config.audio?._fileName
+            ? `[Audio: ${config.audio._fileName}]`
+            : "[Audio uploaded]";
+          audioUrlInput.setAttribute(
+            "title",
+            config.audio?._fileName || "Uploaded audio track"
+          );
+        } else {
+          audioUrlInput.value = audioUrl;
+          audioUrlInput.removeAttribute("title");
+        }
+      }
+      if (removeAudioBtn) removeAudioBtn.style.display = "inline-flex";
+      if (audioVolumeGroup) audioVolumeGroup.style.display = "block";
+      if (audioStatus) {
+        audioStatus.style.display = "block";
+        audioStatus.textContent = config.audio?._fileName
+          ? `✓ Loaded: ${config.audio._fileName}`
+          : "✓ Audio track active";
+      }
+    } else {
+      if (audioUrlInput) {
+        audioUrlInput.value = "";
+        audioUrlInput.removeAttribute("title");
+      }
+      if (removeAudioBtn) removeAudioBtn.style.display = "none";
+      if (audioVolumeGroup) audioVolumeGroup.style.display = "none";
+      if (audioStatus) audioStatus.style.display = "none";
+    }
+
     // Also update project name in header if it exists
     const projectName = this.getEl("project-name");
     if (projectName) {

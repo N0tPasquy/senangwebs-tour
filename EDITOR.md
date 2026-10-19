@@ -333,6 +333,35 @@ const photoHotspot = {
 editor.addHotspot(photoHotspot);
 ```
 
+### Background Audio Management
+
+The editor provides a built-in workflow for ambient background audio loops:
+
+```javascript
+// Set or update background audio
+editor.config.audio = {
+  url: "assets/audio/ambient-nature.mp3", // URL or base64 data URL
+  volume: 0.5,                          // Baseline volume (0.0 to 1.0, default: 0.5)
+  loop: true                            // Continuous playback (default: true)
+};
+
+// Update volume dynamically
+editor.config.audio.volume = 0.6;
+if (editor.previewController?.tourInstance) {
+  editor.previewController.tourInstance.setAudioVolume(0.6);
+}
+
+// Remove background audio
+delete editor.config.audio;
+if (editor.previewController?.tourInstance) {
+  editor.previewController.tourInstance.setAudio(null);
+}
+```
+
+- **Output Volume Scaling:** The runtime automatically scales output volume with a `0.35` multiplier (`actualVolume = volume * 0.35`). A baseline slider value of `1.0` (100%) maps to `0.35` (35%) actual audio output, and the default `0.5` (50%) maps to `0.175` (17.5%), ensuring background audio remains ambient and never overpowers the user.
+- **Preview Integration:** When toggling the preview mode (`previewBtn`), background audio automatically starts playing and immediately pauses upon exiting preview mode (or pressing Escape).
+- **Import/Export:** `exportManager.generateJSON()` includes the `audio` configuration, and `exportManager.loadJSON(data)` restores both the audio state and UI controls automatically.
+
 ### Custom Export
 
 ```javascript
@@ -632,6 +661,11 @@ The editor and viewer now use the **same data format**. Scenes are stored as an 
     title: "My Tour",
     initialSceneId: "scene-1"
   },
+  audio: {                                      // Optional: Looping background audio
+    url: "https://example.com/ambient.mp3",     // Audio URL or base64 data URL
+    volume: 0.5,                                // Baseline volume (0.0 to 1.0, default: 0.5)
+    loop: true                                  // Continuous playback (default: true)
+  },
   scenes: [  // Array of scenes
     {
       id: "scene-1",
@@ -669,6 +703,9 @@ The editor and viewer now use the **same data format**. Scenes are stored as an 
 | Property | Location | Description |
 |----------|----------|-------------|
 | `scenes` | Top level | Array of scene objects |
+| `audio.url` | Top level | Audio URL or base64 data URL for looping soundtrack |
+| `audio.volume` | Top level | Baseline volume (`0.0`–`1.0`, default `0.5`, runtime scales by 0.35 ceiling) |
+| `audio.loop` | Top level | Continuous loop flag (default: `true`) |
 | `panorama` | Scene | Image URL or base64 data URL (max 8192px) |
 | `action.type` | Hotspot | `"navigateTo"`, `"gazeNavigate"`, or `"photo"` |
 | `action.target` | Hotspot | Target scene ID (for `navigateTo` & `gazeNavigate`) |

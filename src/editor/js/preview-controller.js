@@ -131,7 +131,7 @@ class PreviewController {
     // Build tour config using shared transform utilities
     // This includes ALL scenes for navigation support
     const editorScenes = this.editor.sceneManager.scenes || [];
-    const tourConfig = buildPreviewTourConfig(scene, editorScenes);
+    const tourConfig = buildPreviewTourConfig(scene, editorScenes, this.editor.config);
 
     try {
       // Create new tour instance
@@ -183,6 +183,12 @@ class PreviewController {
 
       // Start the tour
       await this.tour.start();
+
+      // If preview mode is currently active, start playing background audio
+      const canvasArea = document.getElementById("canvasArea");
+      if (canvasArea && canvasArea.classList.contains("preview-active")) {
+        this.tour.playAudio().catch(() => {});
+      }
 
       // Mark that we've successfully loaded a scene
       this.hasLoadedScene = true;

@@ -626,6 +626,94 @@ class TourEditor {
             this.emit(EditorEvents.INITIAL_SCENE_CHANGE, { initialSceneId: e.target.value });
         });
 
+        // Tour Background Audio
+        document.getElementById('tourUploadAudioBtn')?.addEventListener('click', () => {
+            document.getElementById('tourAudioFile')?.click();
+        });
+
+        document.getElementById('tourAudioFile')?.addEventListener('change', async (e) => {
+            const file = e.target.files?.[0];
+            if (file) {
+                try {
+                    showToast('Processing audio...', 'info', 1000);
+                    const reader = new FileReader();
+                    const dataUrl = await new Promise((resolve, reject) => {
+                        reader.onload = () => resolve(reader.result);
+                        reader.onerror = reject;
+                        reader.readAsDataURL(file);
+                    });
+
+                    const currentVol = typeof this.config.audio?.volume === 'number' ? this.config.audio.volume : 0.5;
+                    this.config.audio = {
+                        url: dataUrl,
+                        volume: currentVol,
+                        loop: true,
+                        _fileName: file.name
+                    };
+
+                    this.previewController.tour?.setAudio(this.config.audio);
+                    this.uiController.updateTourProperties(this.config);
+                    this.markUnsavedChanges();
+                    this.emit(EditorEvents.TOUR_AUDIO_CHANGE, { audio: this.config.audio });
+                    showToast('Audio track uploaded successfully', 'success');
+                } catch (err) {
+                    console.error('Error loading audio:', err);
+                    showToast('Error loading audio file', 'error');
+                }
+            }
+        });
+
+        document.getElementById('tourAudioUrl')?.addEventListener('input', debounce((e) => {
+            const url = e.target.value.trim();
+            if (url.startsWith('[Audio:') || url.startsWith('[Audio uploaded')) return;
+
+            if (url) {
+                const currentVol = typeof this.config.audio?.volume === 'number' ? this.config.audio.volume : 0.5;
+                this.config.audio = {
+                    url: url,
+                    volume: currentVol,
+                    loop: true
+                };
+                this.previewController.tour?.setAudio(this.config.audio);
+                this.uiController.updateTourProperties(this.config);
+                this.markUnsavedChanges();
+                this.emit(EditorEvents.TOUR_AUDIO_CHANGE, { audio: this.config.audio });
+            } else if (this.config.audio) {
+                delete this.config.audio;
+                this.previewController.tour?.setAudio(null);
+                this.uiController.updateTourProperties(this.config);
+                this.markUnsavedChanges();
+                this.emit(EditorEvents.TOUR_AUDIO_CHANGE, { audio: null });
+            }
+        }, 300));
+
+        document.getElementById('tourRemoveAudioBtn')?.addEventListener('click', () => {
+            delete this.config.audio;
+            const fileInput = document.getElementById('tourAudioFile');
+            if (fileInput) fileInput.value = '';
+            this.previewController.tour?.setAudio(null);
+            this.uiController.updateTourProperties(this.config);
+            this.markUnsavedChanges();
+            this.emit(EditorEvents.TOUR_AUDIO_CHANGE, { audio: null });
+            showToast('Audio track removed', 'info');
+        });
+
+        document.getElementById('tourAudioVolume')?.addEventListener('input', (e) => {
+            const vol = parseFloat(e.target.value) || 0;
+            if (!this.config.audio) {
+                this.config.audio = { volume: vol, loop: true };
+            } else {
+                this.config.audio.volume = vol;
+            }
+            const volumeVal = document.getElementById('tourAudioVolumeVal');
+            if (volumeVal) {
+                volumeVal.textContent = `${Math.round(vol * 100)}%`;
+            }
+            this.previewController.tour?.setAudioVolume(vol);
+            this.markUnsavedChanges();
+            this.emit(EditorEvents.TOUR_AUDIO_CHANGE, { audio: this.config.audio });
+        });
+
         document.getElementById('exportJsonBtn')?.addEventListener('click', () => {
             this.exportManager.exportJSON();
         });
@@ -1266,6 +1354,24 @@ const importUpload = document.getElementById('importUpload');
     markUnsavedChanges() {
         this.hasUnsavedChanges = true;
         this.emit(EditorEvents.UNSAVED_CHANGES);
+    }
+
+    /**
+     * Start playing background audio in preview mode
+     */
+    playPreviewAudio() {
+        if (this.previewController?.tour && this.config.audio?.url) {
+            this.previewController.tour.playAudio().catch(() => {});
+        }
+    }
+
+    /**
+     * Pause background audio when exiting preview mode
+     */
+    pausePreviewAudio() {
+        if (this.previewController?.tour) {
+            this.previewController.tour.pauseAudio();
+        }
     }
 }
 

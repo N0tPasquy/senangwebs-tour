@@ -48,6 +48,7 @@ export const EditorEvents = {
   INITIAL_SCENE_CHANGE: 'config:initialSceneChange',
   TOUR_TITLE_CHANGE: 'tour:titleChange',
   TOUR_DESCRIPTION_CHANGE: 'tour:descriptionChange',
+  TOUR_AUDIO_CHANGE: 'tour:audioChange',
   
   // Preview events
   PREVIEW_START: 'preview:start',

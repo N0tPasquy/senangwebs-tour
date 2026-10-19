@@ -29,6 +29,7 @@ Editor (GUI) → Generates JSON → Library (SWT.Tour) → Renders in A-Frame
   - `HotspotManager.js` - Creates/updates `<a-entity>` hotspots with `swt-hotspot-listener` component
 - **Event System:** Tour emits `scene-loaded`, `hotspot-activated`, `tour-started` via custom `emit()` method
 - **A-Frame Integration:** Manipulates DOM entities directly (not an A-Frame component itself)
+- **Background Audio:** Looping ambient audio with 35% output volume scaling (`audio.volume = sliderVal * 0.35`), autoplay gesture unlock, and lifecycle methods (`playAudio`, `pauseAudio`, `stopAudio`, `setAudioVolume`, `setAudio`, `cleanupAudio`)
 
 ### Editor Architecture (`src/editor/js/`)
 **Six-Controller Pattern** (ES6 modules with exports):
@@ -118,6 +119,11 @@ See README.md Configuration Structure - **do not deviate** without updating both
 ```javascript
 {
   initialScene: "scene-id",       // Required
+  audio: {                        // Optional: Background audio loop
+    url: "ambient.mp3",           // Audio URL or data URL
+    volume: 0.5,                  // Baseline volume (0.0 to 1.0, default: 0.5, scaled by 0.35 ceiling in runtime)
+    loop: true                    // Loop continuously (default: true)
+  },
   scenes: {                        // Object (not array!)
     "scene-id": {
       name: "Scene Name",

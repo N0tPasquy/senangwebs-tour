@@ -90,15 +90,22 @@ window.addEventListener("DOMContentLoaded", () => {
       if (window.editor) window.editor.exportManager.showExportPreview();
     }
 
-    // ESC to close modals
+    // ESC to close modals or exit preview
     if (e.key === "Escape") {
       document.querySelectorAll(".modal.show").forEach((modal) => {
         modal.classList.remove("show");
       });
+      const canvas = document.getElementById("canvasArea");
+      if (canvas && canvas.classList.contains("preview-active")) {
+        canvas.classList.remove("preview-active");
+        if (window.editor) {
+          window.editor.pausePreviewAudio();
+        }
+      }
     }
   });
 
-  // Preview button - just focuses on the preview area
+  // Preview button - focuses on preview area and controls audio playback
   const previewBtn = document.getElementById("previewBtn");
   if (previewBtn) {
     previewBtn.addEventListener("click", () => {
@@ -108,6 +115,17 @@ window.addEventListener("DOMContentLoaded", () => {
       const canvas = document.getElementById("canvasArea");
       if (preview && canvas) {
         canvas.classList.toggle("preview-active");
+        const isPreviewActive = canvas.classList.contains("preview-active");
+
+        // Control background audio for preview mode
+        if (window.editor) {
+          if (isPreviewActive) {
+            window.editor.playPreviewAudio();
+          } else {
+            window.editor.pausePreviewAudio();
+          }
+        }
+
         // refresh preview
         if (window.editor && window.editor.previewController) {
           window.editor.previewController.refresh();

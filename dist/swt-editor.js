@@ -694,6 +694,7 @@
       INITIAL_SCENE_CHANGE: 'config:initialSceneChange',
       TOUR_TITLE_CHANGE: 'tour:titleChange',
       TOUR_DESCRIPTION_CHANGE: 'tour:descriptionChange',
+      TOUR_AUDIO_CHANGE: 'tour:audioChange',
       
       // Preview events
       PREVIEW_START: 'preview:start',
@@ -1435,7 +1436,7 @@
       const sceneList = scenes || [];
 
       // Validate the initial-scene reference; fall back to the first scene
-      let initialScene = config.initialSceneId;
+      let initialScene = config.initialSceneId || config.initialScene;
       const initialSceneExists = initialScene && sceneList.some((s) => s.id === initialScene);
       if (!initialSceneExists) {
         if (initialScene) {
@@ -1446,21 +1447,43 @@
         initialScene = sceneList.length > 0 ? sceneList[0].id : '';
       }
 
-      return {
+      const tourConfig = {
         initialScene: initialScene,
         scenes: sceneList,
       };
+
+      if (config.title) {
+        tourConfig.title = config.title;
+      }
+      if (config.description) {
+        tourConfig.description = config.description;
+      }
+      if (config.audio && config.audio.url) {
+        tourConfig.audio = {
+          url: config.audio.url,
+          volume: typeof config.audio.volume === 'number' ? config.audio.volume : 0.5,
+          loop: config.audio.loop !== false,
+        };
+      }
+
+      return tourConfig;
     }
 
     /**
      * Build tour config for preview (sets initial scene to current scene)
      * @param {Object} currentScene - The scene to show initially
      * @param {Array} allScenes - All scenes for navigation support
+     * @param {Object} [extraConfig] - Optional extra config (audio, title, etc.)
      * @returns {Object} Complete tour config
      */
-    function buildPreviewTourConfig(currentScene, allScenes) {
+    function buildPreviewTourConfig(currentScene, allScenes, extraConfig = {}) {
       const config = buildTourConfig(
-        { initialSceneId: currentScene.id },
+        { 
+          initialSceneId: currentScene.id,
+          title: extraConfig.title,
+          description: extraConfig.description,
+          audio: extraConfig.audio
+        },
         allScenes
       );
       config.isEditor = true;
@@ -1597,7 +1620,7 @@
         // Build tour config using shared transform utilities
         // This includes ALL scenes for navigation support
         const editorScenes = this.editor.sceneManager.scenes || [];
-        const tourConfig = buildPreviewTourConfig(scene, editorScenes);
+        const tourConfig = buildPreviewTourConfig(scene, editorScenes, this.editor.config);
 
         try {
           // Create new tour instance
@@ -1649,6 +1672,12 @@
 
           // Start the tour
           await this.tour.start();
+
+          // If preview mode is currently active, start playing background audio
+          const canvasArea = document.getElementById("canvasArea");
+          if (canvasArea && canvasArea.classList.contains("preview-active")) {
+            this.tour.playAudio().catch(() => {});
+          }
 
           // Mark that we've successfully loaded a scene
           this.hasLoadedScene = true;
@@ -5339,6 +5368,58 @@
         const tourInitialScene = this.getEl("tourInitialScene");
         if (tourInitialScene) tourInitialScene.value = config.initialSceneId || "";
 
+        // Background audio properties
+        const audioUrl = config.audio?.url || "";
+        const audioUrlInput = this.getEl("tourAudioUrl");
+        const removeAudioBtn = this.getEl("tourRemoveAudioBtn");
+        const audioVolumeGroup = this.getEl("tourAudioVolumeGroup");
+        const audioStatus = this.getEl("tourAudioStatus");
+        const volumeSlider = this.getEl("tourAudioVolume");
+        const volumeVal = this.getEl("tourAudioVolumeVal");
+
+        const rawVolume = typeof config.audio?.volume === "number" ? config.audio.volume : 0.5;
+        const volumePercent = Math.round(rawVolume * 100);
+
+        if (volumeSlider) {
+          volumeSlider.value = rawVolume;
+        }
+        if (volumeVal) {
+          volumeVal.textContent = `${volumePercent}%`;
+        }
+
+        if (audioUrl) {
+          if (audioUrlInput) {
+            if (audioUrl.startsWith("data:")) {
+              audioUrlInput.value = config.audio?._fileName
+                ? `[Audio: ${config.audio._fileName}]`
+                : "[Audio uploaded]";
+              audioUrlInput.setAttribute(
+                "title",
+                config.audio?._fileName || "Uploaded audio track"
+              );
+            } else {
+              audioUrlInput.value = audioUrl;
+              audioUrlInput.removeAttribute("title");
+            }
+          }
+          if (removeAudioBtn) removeAudioBtn.style.display = "inline-flex";
+          if (audioVolumeGroup) audioVolumeGroup.style.display = "block";
+          if (audioStatus) {
+            audioStatus.style.display = "block";
+            audioStatus.textContent = config.audio?._fileName
+              ? `✓ Loaded: ${config.audio._fileName}`
+              : "✓ Audio track active";
+          }
+        } else {
+          if (audioUrlInput) {
+            audioUrlInput.value = "";
+            audioUrlInput.removeAttribute("title");
+          }
+          if (removeAudioBtn) removeAudioBtn.style.display = "none";
+          if (audioVolumeGroup) audioVolumeGroup.style.display = "none";
+          if (audioStatus) audioStatus.style.display = "none";
+        }
+
         // Also update project name in header if it exists
         const projectName = this.getEl("project-name");
         if (projectName) {
@@ -5633,6 +5714,22 @@
             this.editor.config.initialSceneId = requestedInitialScene;
           } else if (scenes.length > 0) {
             this.editor.config.initialSceneId = scenes[0].id;
+          }
+
+          if (tourData.title) {
+            this.editor.config.title = tourData.title;
+          }
+          if (tourData.description) {
+            this.editor.config.description = tourData.description;
+          }
+          if (tourData.audio && tourData.audio.url) {
+            this.editor.config.audio = {
+              url: tourData.audio.url,
+              volume: typeof tourData.audio.volume === 'number' ? tourData.audio.volume : 0.5,
+              loop: tourData.audio.loop !== false
+            };
+          } else {
+            delete this.editor.config.audio;
           }
 
           // Reset preview and selection state so the new project renders cleanly
@@ -6472,6 +6569,94 @@
                 this.emit(EditorEvents.INITIAL_SCENE_CHANGE, { initialSceneId: e.target.value });
             });
 
+            // Tour Background Audio
+            document.getElementById('tourUploadAudioBtn')?.addEventListener('click', () => {
+                document.getElementById('tourAudioFile')?.click();
+            });
+
+            document.getElementById('tourAudioFile')?.addEventListener('change', async (e) => {
+                const file = e.target.files?.[0];
+                if (file) {
+                    try {
+                        showToast('Processing audio...', 'info', 1000);
+                        const reader = new FileReader();
+                        const dataUrl = await new Promise((resolve, reject) => {
+                            reader.onload = () => resolve(reader.result);
+                            reader.onerror = reject;
+                            reader.readAsDataURL(file);
+                        });
+
+                        const currentVol = typeof this.config.audio?.volume === 'number' ? this.config.audio.volume : 0.5;
+                        this.config.audio = {
+                            url: dataUrl,
+                            volume: currentVol,
+                            loop: true,
+                            _fileName: file.name
+                        };
+
+                        this.previewController.tour?.setAudio(this.config.audio);
+                        this.uiController.updateTourProperties(this.config);
+                        this.markUnsavedChanges();
+                        this.emit(EditorEvents.TOUR_AUDIO_CHANGE, { audio: this.config.audio });
+                        showToast('Audio track uploaded successfully', 'success');
+                    } catch (err) {
+                        console.error('Error loading audio:', err);
+                        showToast('Error loading audio file', 'error');
+                    }
+                }
+            });
+
+            document.getElementById('tourAudioUrl')?.addEventListener('input', debounce((e) => {
+                const url = e.target.value.trim();
+                if (url.startsWith('[Audio:') || url.startsWith('[Audio uploaded')) return;
+
+                if (url) {
+                    const currentVol = typeof this.config.audio?.volume === 'number' ? this.config.audio.volume : 0.5;
+                    this.config.audio = {
+                        url: url,
+                        volume: currentVol,
+                        loop: true
+                    };
+                    this.previewController.tour?.setAudio(this.config.audio);
+                    this.uiController.updateTourProperties(this.config);
+                    this.markUnsavedChanges();
+                    this.emit(EditorEvents.TOUR_AUDIO_CHANGE, { audio: this.config.audio });
+                } else if (this.config.audio) {
+                    delete this.config.audio;
+                    this.previewController.tour?.setAudio(null);
+                    this.uiController.updateTourProperties(this.config);
+                    this.markUnsavedChanges();
+                    this.emit(EditorEvents.TOUR_AUDIO_CHANGE, { audio: null });
+                }
+            }, 300));
+
+            document.getElementById('tourRemoveAudioBtn')?.addEventListener('click', () => {
+                delete this.config.audio;
+                const fileInput = document.getElementById('tourAudioFile');
+                if (fileInput) fileInput.value = '';
+                this.previewController.tour?.setAudio(null);
+                this.uiController.updateTourProperties(this.config);
+                this.markUnsavedChanges();
+                this.emit(EditorEvents.TOUR_AUDIO_CHANGE, { audio: null });
+                showToast('Audio track removed', 'info');
+            });
+
+            document.getElementById('tourAudioVolume')?.addEventListener('input', (e) => {
+                const vol = parseFloat(e.target.value) || 0;
+                if (!this.config.audio) {
+                    this.config.audio = { volume: vol, loop: true };
+                } else {
+                    this.config.audio.volume = vol;
+                }
+                const volumeVal = document.getElementById('tourAudioVolumeVal');
+                if (volumeVal) {
+                    volumeVal.textContent = `${Math.round(vol * 100)}%`;
+                }
+                this.previewController.tour?.setAudioVolume(vol);
+                this.markUnsavedChanges();
+                this.emit(EditorEvents.TOUR_AUDIO_CHANGE, { audio: this.config.audio });
+            });
+
             document.getElementById('exportJsonBtn')?.addEventListener('click', () => {
                 this.exportManager.exportJSON();
             });
@@ -7113,6 +7298,24 @@
             this.hasUnsavedChanges = true;
             this.emit(EditorEvents.UNSAVED_CHANGES);
         }
+
+        /**
+         * Start playing background audio in preview mode
+         */
+        playPreviewAudio() {
+            if (this.previewController?.tour && this.config.audio?.url) {
+                this.previewController.tour.playAudio().catch(() => {});
+            }
+        }
+
+        /**
+         * Pause background audio when exiting preview mode
+         */
+        pausePreviewAudio() {
+            if (this.previewController?.tour) {
+                this.previewController.tour.pauseAudio();
+            }
+        }
     };
 
     // Initialize editor when DOM is ready
@@ -7217,15 +7420,22 @@
           if (window.editor) window.editor.exportManager.showExportPreview();
         }
 
-        // ESC to close modals
+        // ESC to close modals or exit preview
         if (e.key === "Escape") {
           document.querySelectorAll(".modal.show").forEach((modal) => {
             modal.classList.remove("show");
           });
+          const canvas = document.getElementById("canvasArea");
+          if (canvas && canvas.classList.contains("preview-active")) {
+            canvas.classList.remove("preview-active");
+            if (window.editor) {
+              window.editor.pausePreviewAudio();
+            }
+          }
         }
       });
 
-      // Preview button - just focuses on the preview area
+      // Preview button - focuses on preview area and controls audio playback
       const previewBtn = document.getElementById("previewBtn");
       if (previewBtn) {
         previewBtn.addEventListener("click", () => {
@@ -7235,6 +7445,17 @@
           const canvas = document.getElementById("canvasArea");
           if (preview && canvas) {
             canvas.classList.toggle("preview-active");
+            const isPreviewActive = canvas.classList.contains("preview-active");
+
+            // Control background audio for preview mode
+            if (window.editor) {
+              if (isPreviewActive) {
+                window.editor.playPreviewAudio();
+              } else {
+                window.editor.pausePreviewAudio();
+              }
+            }
+
             // refresh preview
             if (window.editor && window.editor.previewController) {
               window.editor.previewController.refresh();

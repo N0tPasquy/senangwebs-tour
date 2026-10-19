@@ -2809,6 +2809,10 @@ class Tour {
     // Normalize scenes to array format (backward compatibility with object format)
     this.scenesArray = this.normalizeScenesArray(tourConfig.scenes);
 
+    // Background audio state
+    this.bgAudio = null;
+    this.boundUnlockAudio = null;
+
     this.boundHandleHotspotClick = this.handleHotspotClick.bind(this);
     this.initializeRuntime();
   }
@@ -2887,6 +2891,10 @@ class Tour {
 
     // Ensure cursor exists for interaction
     this.ensureCursor();
+
+    // Setup background audio if configured
+    this.setupBackgroundAudio();
+
     this._epoch = (this._epoch || 0) + 1;
     this.isDestroyed = false;
   }
@@ -3047,6 +3055,13 @@ class Tour {
 
         if (this.gazeManager) {
           this.gazeManager.onSceneLoaded();
+        }
+
+        // Start background audio if not in editor mode
+        if (!this.config.isEditor && this.bgAudio) {
+          this.playAudio().catch(() => {
+            this.setupAudioAutoplayUnlock();
+          });
         }
 
         return Promise.resolve();
@@ -3563,7 +3578,172 @@ class Tour {
     // Clean up photo modal if open
     this.closePhotoModal();
 
+    // Clean up background audio
+    this.cleanupAudio();
+
     this.isStarted = false;
+  }
+
+  // --- Background Audio Methods ---
+
+  /**
+   * Set up HTML5 Audio instance for looping background audio
+   */
+  setupBackgroundAudio() {
+    const AudioConstructor =
+      (typeof window !== "undefined" && window.Audio) ||
+      (typeof Audio !== "undefined" ? Audio : null);
+    if (!AudioConstructor) return;
+    if (!this.config.audio || !this.config.audio.url) return;
+
+    this.cleanupAudio();
+
+    try {
+      const audio = new AudioConstructor(this.config.audio.url);
+      audio.loop = this.config.audio.loop !== false;
+      const vol =
+        typeof this.config.audio.volume === "number"
+          ? Math.max(0, Math.min(1, this.config.audio.volume))
+          : 0.5;
+      // Output volume is scaled relative to 35% maximum (so 0-100% slider maps to 0.0 - 0.35 actual volume)
+      audio.volume = vol * 0.35;
+      audio.preload = "auto";
+      this.bgAudio = audio;
+    } catch (err) {
+      console.warn("Failed to initialize background audio:", err);
+    }
+  }
+
+  /**
+   * Play background audio
+   * @returns {Promise}
+   */
+  playAudio() {
+    if (!this.bgAudio) return Promise.resolve();
+    try {
+      const res = this.bgAudio.play();
+      if (res && typeof res.then === "function") {
+        return res.catch((err) => {
+          return Promise.reject(err);
+        });
+      }
+      return Promise.resolve();
+    } catch (err) {
+      return Promise.reject(err);
+    }
+  }
+
+  /**
+   * Pause background audio
+   */
+  pauseAudio() {
+    if (!this.bgAudio) return;
+    try {
+      this.bgAudio.pause();
+    } catch (err) {}
+  }
+
+  /**
+   * Stop background audio and reset playback position
+   */
+  stopAudio() {
+    if (!this.bgAudio) return;
+    try {
+      this.bgAudio.pause();
+      this.bgAudio.currentTime = 0;
+    } catch (err) {}
+  }
+
+  /**
+   * Set audio volume (0.0 to 1.0, scaled relative to 50% max output volume)
+   * @param {number} vol
+   */
+  setAudioVolume(vol) {
+    const safeVol = Math.max(
+      0,
+      Math.min(1, typeof vol === "number" ? vol : parseFloat(vol) || 0)
+    );
+    if (this.config.audio) {
+      this.config.audio.volume = safeVol;
+    }
+    if (this.bgAudio) {
+      // 0.0 to 1.0 slider value scaled relative to 35% max output volume
+      this.bgAudio.volume = safeVol * 0.35;
+    }
+  }
+
+  /**
+   * Update audio configuration dynamically
+   * @param {Object|null} audioConfig
+   */
+  setAudio(audioConfig) {
+    if (!audioConfig || !audioConfig.url) {
+      this.cleanupAudio();
+      if (this.config.audio) {
+        delete this.config.audio;
+      }
+      return;
+    }
+    this.config.audio = {
+      url: audioConfig.url,
+      volume: typeof audioConfig.volume === "number" ? audioConfig.volume : 0.5,
+      loop: audioConfig.loop !== false,
+    };
+    const wasPlaying = Boolean(this.bgAudio && !this.bgAudio.paused);
+    this.setupBackgroundAudio();
+    if (wasPlaying) {
+      this.playAudio().catch(() => {});
+    }
+  }
+
+  /**
+   * Listen for user gesture to unlock autoplay if initial play was blocked
+   */
+  setupAudioAutoplayUnlock() {
+    if (this.boundUnlockAudio || !this.bgAudio || typeof document === "undefined") return;
+
+    this.boundUnlockAudio = () => {
+      if (this.bgAudio) {
+        this.playAudio()
+          .then(() => {
+            this.removeAudioAutoplayUnlock();
+          })
+          .catch(() => {});
+      }
+    };
+
+    document.addEventListener("click", this.boundUnlockAudio, { once: true });
+    document.addEventListener("touchstart", this.boundUnlockAudio, { once: true });
+    document.addEventListener("keydown", this.boundUnlockAudio, { once: true });
+  }
+
+  /**
+   * Remove autoplay unlock listeners
+   */
+  removeAudioAutoplayUnlock() {
+    if (this.boundUnlockAudio && typeof document !== "undefined") {
+      document.removeEventListener("click", this.boundUnlockAudio);
+      document.removeEventListener("touchstart", this.boundUnlockAudio);
+      document.removeEventListener("keydown", this.boundUnlockAudio);
+      this.boundUnlockAudio = null;
+    }
+  }
+
+  /**
+   * Clean up background audio resources
+   */
+  cleanupAudio() {
+    this.removeAudioAutoplayUnlock();
+    if (this.bgAudio) {
+      try {
+        this.bgAudio.pause();
+        this.bgAudio.src = "";
+        if (typeof this.bgAudio.load === "function") {
+          this.bgAudio.load();
+        }
+      } catch (err) {}
+      this.bgAudio = null;
+    }
   }
 }
 
