@@ -48,6 +48,14 @@ export function buildTourConfig(config, scenes) {
       loop: config.audio.loop !== false,
     };
   }
+  if (config.welcome && config.welcome.enabled !== false && (config.welcome.enabled || config.welcome.title || config.welcome.description)) {
+    tourConfig.welcome = {
+      enabled: config.welcome.enabled !== false,
+      title: config.welcome.title || '',
+      description: config.welcome.description || '',
+      buttonText: config.welcome.buttonText || 'Start Tour',
+    };
+  }
 
   return tourConfig;
 }
@@ -65,7 +73,8 @@ export function buildPreviewTourConfig(currentScene, allScenes, extraConfig = {}
       initialSceneId: currentScene.id,
       title: extraConfig.title,
       description: extraConfig.description,
-      audio: extraConfig.audio
+      audio: extraConfig.audio,
+      welcome: extraConfig.welcome
     },
     allScenes
   );

@@ -714,6 +714,58 @@ class TourEditor {
             this.emit(EditorEvents.TOUR_AUDIO_CHANGE, { audio: this.config.audio });
         });
 
+        // Tour Welcome Popup
+        document.getElementById('tourWelcomeEnabled')?.addEventListener('change', (e) => {
+            const isChecked = e.target.checked;
+            if (isChecked) {
+                if (!this.config.welcome) {
+                    this.config.welcome = {
+                        enabled: true,
+                        title: document.getElementById('tourWelcomeTitle')?.value || 'Welcome to the Tour',
+                        description: document.getElementById('tourWelcomeDesc')?.value || '',
+                        buttonText: document.getElementById('tourWelcomeBtnText')?.value || 'Start Tour'
+                    };
+                } else {
+                    this.config.welcome.enabled = true;
+                }
+            } else {
+                if (this.config.welcome) {
+                    this.config.welcome.enabled = false;
+                }
+            }
+            const fields = document.getElementById('tourWelcomeFields');
+            if (fields) fields.style.display = isChecked ? 'block' : 'none';
+            this.markUnsavedChanges();
+            this.emit(EditorEvents.TOUR_WELCOME_CHANGE, { welcome: this.config.welcome });
+        });
+
+        document.getElementById('tourWelcomeTitle')?.addEventListener('input', debounce((e) => {
+            if (!this.config.welcome) {
+                this.config.welcome = { enabled: true, title: '', description: '', buttonText: 'Start Tour' };
+            }
+            this.config.welcome.title = e.target.value;
+            this.markUnsavedChanges();
+            this.emit(EditorEvents.TOUR_WELCOME_CHANGE, { welcome: this.config.welcome });
+        }, 300));
+
+        document.getElementById('tourWelcomeDesc')?.addEventListener('input', debounce((e) => {
+            if (!this.config.welcome) {
+                this.config.welcome = { enabled: true, title: 'Welcome to the Tour', description: '', buttonText: 'Start Tour' };
+            }
+            this.config.welcome.description = e.target.value;
+            this.markUnsavedChanges();
+            this.emit(EditorEvents.TOUR_WELCOME_CHANGE, { welcome: this.config.welcome });
+        }, 300));
+
+        document.getElementById('tourWelcomeBtnText')?.addEventListener('input', debounce((e) => {
+            if (!this.config.welcome) {
+                this.config.welcome = { enabled: true, title: 'Welcome to the Tour', description: '', buttonText: 'Start Tour' };
+            }
+            this.config.welcome.buttonText = e.target.value;
+            this.markUnsavedChanges();
+            this.emit(EditorEvents.TOUR_WELCOME_CHANGE, { welcome: this.config.welcome });
+        }, 300));
+
         document.getElementById('exportJsonBtn')?.addEventListener('click', () => {
             this.exportManager.exportJSON();
         });

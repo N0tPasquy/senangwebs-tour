@@ -1341,6 +1341,387 @@ async function runTests() {
     assert(editorTour.bgAudio === null, 'Audio element cleanly cleaned up on destroy');
   }
 
+  // --- Test 37: Mobile Autoplay unlock and Base64 Blob URL conversion ---
+  console.log('\nTest 37: Mobile Autoplay unlock and Base64 Blob URL conversion');
+  {
+    const registeredWindowEvents = {};
+    const registeredDocEvents = {};
+    let revokedBlobUrl = null;
+
+    const mockWindow = {
+      Audio: global.Audio,
+      Blob: function (parts, opts) {
+        this.parts = parts;
+        this.type = opts?.type;
+      },
+      URL: {
+        createObjectURL: (blob) => 'blob:mock-audio-url-' + blob.type,
+        revokeObjectURL: (url) => { revokedBlobUrl = url; }
+      },
+      addEventListener: (type, handler, opts) => {
+        registeredWindowEvents[type] = { handler, opts };
+      },
+      removeEventListener: (type) => {
+        delete registeredWindowEvents[type];
+      }
+    };
+
+    const mockDoc = {
+      addEventListener: (type, handler, opts) => {
+        registeredDocEvents[type] = { handler, opts };
+      },
+      removeEventListener: (type) => {
+        delete registeredDocEvents[type];
+      }
+    };
+
+    class MobileAudioTestController {
+      constructor(config, win, doc) {
+        this.config = config;
+        this.win = win;
+        this.doc = doc;
+        this.bgAudio = null;
+        this.audioBlobUrl = null;
+        this.boundUnlockAudio = null;
+        this._audioUnlockEvents = null;
+        this.setupBackgroundAudio();
+      }
+
+      setupBackgroundAudio() {
+        if (!this.config.audio || !this.config.audio.url) return;
+        this.cleanupAudio();
+
+        let audioSrc = this.config.audio.url;
+        if (
+          typeof audioSrc === 'string' &&
+          audioSrc.startsWith('data:audio/') &&
+          this.win?.Blob &&
+          this.win?.URL?.createObjectURL
+        ) {
+          const parts = audioSrc.split(',');
+          const mimeMatch = parts[0].match(/:(.*?);/);
+          const mime = mimeMatch ? mimeMatch[1] : 'audio/mp3';
+          const blob = new this.win.Blob(['mock-data'], { type: mime });
+          audioSrc = this.win.URL.createObjectURL(blob);
+          this.audioBlobUrl = audioSrc;
+        }
+
+        const audio = new this.win.Audio(audioSrc);
+        audio.loop = this.config.audio.loop !== false;
+        const vol = typeof this.config.audio.volume === 'number'
+          ? Math.max(0, Math.min(1, this.config.audio.volume))
+          : 0.5;
+        audio.volume = vol * 0.35;
+        this.bgAudio = audio;
+      }
+
+      playAudio() {
+        if (!this.bgAudio) return Promise.resolve();
+        return this.bgAudio.play();
+      }
+
+      setupAudioAutoplayUnlock() {
+        if (this.boundUnlockAudio || !this.bgAudio || !this.win) return;
+
+        this.boundUnlockAudio = () => {
+          if (this.bgAudio) {
+            this.playAudio()
+              .then(() => {
+                this.removeAudioAutoplayUnlock();
+              })
+              .catch(() => {});
+          }
+        };
+
+        const events = ['click', 'touchend', 'pointerup', 'keydown'];
+        this._audioUnlockEvents = events;
+        events.forEach((evtName) => {
+          this.win.addEventListener(evtName, this.boundUnlockAudio, { capture: true, passive: true });
+          this.doc.addEventListener(evtName, this.boundUnlockAudio, { capture: true, passive: true });
+        });
+      }
+
+      removeAudioAutoplayUnlock() {
+        if (this.boundUnlockAudio) {
+          const events = this._audioUnlockEvents || ['click', 'touchend', 'pointerup', 'keydown'];
+          events.forEach((evtName) => {
+            this.win.removeEventListener(evtName, this.boundUnlockAudio, { capture: true });
+            this.doc.removeEventListener(evtName, this.boundUnlockAudio, { capture: true });
+          });
+          this.boundUnlockAudio = null;
+        }
+      }
+
+      cleanupAudio() {
+        this.removeAudioAutoplayUnlock();
+        if (this.audioBlobUrl && this.win?.URL?.revokeObjectURL) {
+          this.win.URL.revokeObjectURL(this.audioBlobUrl);
+          this.audioBlobUrl = null;
+        }
+        if (this.bgAudio) {
+          this.bgAudio.pause();
+          this.bgAudio = null;
+        }
+      }
+    }
+
+    // 1. Verify Base64 Data URL is converted into Blob URL to prevent mobile decoder stalls
+    const controller = new MobileAudioTestController({
+      audio: { url: 'data:audio/mp3;base64,mockBase64String', volume: 0.8 }
+    }, mockWindow, mockDoc);
+
+    assert(controller.audioBlobUrl === 'blob:mock-audio-url-audio/mp3', 'Base64 data URL converted to Blob URL');
+    assert(controller.bgAudio.url === 'blob:mock-audio-url-audio/mp3', 'Audio element src set to Blob URL');
+
+    // 2. Setup autoplay unlock listeners on mobile gesture events
+    controller.setupAudioAutoplayUnlock();
+    assert(registeredWindowEvents['touchend'] !== undefined, 'touchend listener registered on window');
+    assert(registeredWindowEvents['pointerup'] !== undefined, 'pointerup listener registered on window');
+    assert(registeredWindowEvents['click'] !== undefined, 'click listener registered on window');
+    assert(registeredWindowEvents['touchend'].opts.capture === true, 'touchend uses capture: true');
+    assert(registeredDocEvents['touchend'] !== undefined, 'touchend listener registered on document');
+
+    // 3. User interaction triggers play and cleans up unlock listeners
+    controller.boundUnlockAudio();
+    await Promise.resolve();
+    assert(controller.boundUnlockAudio === null, 'Unlock listeners removed after successful audio playback');
+    assert(registeredWindowEvents['touchend'] === undefined, 'touchend listener removed from window');
+    assert(registeredDocEvents['touchend'] === undefined, 'touchend listener removed from document');
+
+    // 4. Cleanup revokes Blob URL
+    controller.cleanupAudio();
+    assert(revokedBlobUrl === 'blob:mock-audio-url-audio/mp3', 'Blob URL revoked on audio cleanup');
+    assert(controller.audioBlobUrl === null, 'audioBlobUrl cleared');
+  }
+
+  // --- Test 38: Welcome Popup configuration, export serialization, and audio trigger ---
+  console.log('\nTest 38: Welcome Popup configuration, export serialization, and audio trigger');
+  {
+    const scenes = [
+      { id: 'scene-1', name: 'Scene 1', panorama: 'scene1.jpg' }
+    ];
+
+    // 1. Export preservation via buildTourConfig
+    const editorConfigWithWelcome = {
+      initialSceneId: 'scene-1',
+      title: 'Grand Villa Tour',
+      welcome: {
+        enabled: true,
+        title: 'Welcome to the Villa',
+        description: 'Immerse yourself in 360 virtual reality. Tap Start Tour to activate sound.',
+        buttonText: 'Enter Experience'
+      }
+    };
+
+    const exportedTourConfig = buildTourConfig(editorConfigWithWelcome, scenes);
+    assert(exportedTourConfig.welcome !== undefined, 'Exported tour config includes welcome configuration');
+    assert(exportedTourConfig.welcome.enabled === true, 'Welcome enabled (true) preserved in export');
+    assert(exportedTourConfig.welcome.title === 'Welcome to the Villa', 'Welcome title preserved in export');
+    assert(exportedTourConfig.welcome.description === 'Immerse yourself in 360 virtual reality. Tap Start Tour to activate sound.', 'Welcome description preserved in export');
+    assert(exportedTourConfig.welcome.buttonText === 'Enter Experience', 'Welcome buttonText preserved in export');
+
+    // 2. Default button text fallback ('Start Tour')
+    const configWithDefaultBtn = buildTourConfig({
+      initialSceneId: 'scene-1',
+      welcome: {
+        enabled: true,
+        title: 'Hello'
+      }
+    }, scenes);
+    assert(configWithDefaultBtn.welcome.buttonText === 'Start Tour', 'Default button text is "Start Tour"');
+
+    // 3. buildPreviewTourConfig retains welcome configuration and sets isEditor: true
+    const previewConfig = buildPreviewTourConfig(scenes[0], scenes, editorConfigWithWelcome);
+    assert(previewConfig.isEditor === true, 'Preview config has isEditor: true');
+    assert(previewConfig.welcome !== undefined, 'Preview config includes welcome configuration');
+    assert(previewConfig.welcome.title === 'Welcome to the Villa', 'Preview config preserves welcome title');
+
+    // 4. Standalone Tour welcome modal DOM structure & audio trigger on mobile gesture
+    class MockDomDocument {
+      constructor() {
+        this.elements = {};
+        this.body = {
+          children: [],
+          appendChild: (el) => {
+            el.parentNode = this.body;
+            this.body.children.push(el);
+            if (el.id) this.elements[el.id] = el;
+            return el;
+          },
+          removeChild: (el) => {
+            const idx = this.body.children.indexOf(el);
+            if (idx >= 0) this.body.children.splice(idx, 1);
+            if (el.id) delete this.elements[el.id];
+            el.parentNode = null;
+            return el;
+          }
+        };
+      }
+
+      createElement(tag) {
+        const el = {
+          tagName: tag.toUpperCase(),
+          id: '',
+          className: '',
+          attributes: {},
+          children: [],
+          parentNode: null,
+          listeners: {},
+          setAttribute(k, v) { this.attributes[k] = v; },
+          getAttribute(k) { return this.attributes[k]; },
+          addEventListener(type, handler) {
+            if (!this.listeners[type]) this.listeners[type] = [];
+            this.listeners[type].push(handler);
+          },
+          removeEventListener(type, handler) {
+            if (!this.listeners[type]) return;
+            this.listeners[type] = this.listeners[type].filter(h => h !== handler);
+          },
+          querySelector(sel) {
+            for (const child of this.children) {
+              if (sel.startsWith('.') && child.className.split(/\s+/).includes(sel.slice(1))) {
+                return child;
+              }
+              const found = child.querySelector?.(sel);
+              if (found) return found;
+            }
+            return null;
+          }
+        };
+        return el;
+      }
+
+      getElementById(id) {
+        return this.elements[id] || null;
+      }
+    }
+
+    class TestTourWelcomeController {
+      constructor(config, doc) {
+        this.config = config;
+        this.doc = doc;
+        this.welcomeModalEl = null;
+        this.audioPlayed = false;
+        this.eventsEmitted = [];
+      }
+
+      emit(name, detail = {}) {
+        this.eventsEmitted.push({ name, detail });
+      }
+
+      playAudio() {
+        this.audioPlayed = true;
+        return Promise.resolve();
+      }
+
+      openWelcomeModal(welcomeData = null) {
+        this.closeWelcomeModal();
+        const data = welcomeData || this.config.welcome || {};
+        const title = data.title !== undefined ? data.title : 'Welcome to the Tour';
+        const description = data.description !== undefined ? data.description : '';
+        const buttonText = data.buttonText || 'Start Tour';
+
+        const modal = this.doc.createElement('div');
+        modal.id = 'swt-welcome-modal';
+        modal.className = 'swt-welcome-modal-overlay';
+
+        const card = this.doc.createElement('div');
+        card.className = 'swt-welcome-modal-card';
+
+        const closeBtn = this.doc.createElement('button');
+        closeBtn.className = 'swt-welcome-modal-close';
+        closeBtn.addEventListener('click', () => this.closeWelcomeModal());
+
+        const content = this.doc.createElement('div');
+        content.className = 'swt-welcome-modal-content';
+
+        const titleEl = this.doc.createElement('h2');
+        titleEl.className = 'swt-welcome-modal-title';
+        titleEl.textContent = title;
+
+        const descEl = this.doc.createElement('p');
+        descEl.className = 'swt-welcome-modal-desc';
+        descEl.textContent = description;
+
+        const startBtn = this.doc.createElement('button');
+        startBtn.className = 'swt-welcome-modal-btn';
+        startBtn.textContent = buttonText;
+        startBtn.addEventListener('click', () => {
+          this.playAudio();
+          this.closeWelcomeModal();
+          this.emit('tour-welcome-started');
+        });
+
+        content.children.push(titleEl, descEl, startBtn);
+        card.children.push(closeBtn, content);
+        modal.children.push(card);
+
+        this.doc.body.appendChild(modal);
+        this.welcomeModalEl = modal;
+        this.emit('tour-welcome-opened');
+      }
+
+      closeWelcomeModal() {
+        if (this.welcomeModalEl && this.welcomeModalEl.parentNode) {
+          this.welcomeModalEl.parentNode.removeChild(this.welcomeModalEl);
+        }
+        this.welcomeModalEl = null;
+        this.emit('tour-welcome-closed');
+      }
+
+      start() {
+        if (!this.config.isEditor && this.config.welcome && this.config.welcome.enabled !== false) {
+          this.openWelcomeModal();
+        }
+      }
+    }
+
+    const mockDoc = new MockDomDocument();
+    const tour = new TestTourWelcomeController({
+      welcome: {
+        enabled: true,
+        title: 'Welcome to the Tour',
+        description: 'Tap below to explore with audio.',
+        buttonText: 'Start Tour'
+      }
+    }, mockDoc);
+
+    // Initial state: not started yet
+    assert(mockDoc.getElementById('swt-welcome-modal') === null, 'Welcome modal not created before start()');
+
+    // Standalone start: opens modal
+    tour.start();
+    assert(mockDoc.getElementById('swt-welcome-modal') !== null, 'Welcome modal created and displayed on start()');
+    assert(tour.eventsEmitted.some(e => e.name === 'tour-welcome-opened'), 'tour-welcome-opened event emitted');
+
+    const modal = mockDoc.getElementById('swt-welcome-modal');
+    const startBtn = modal.querySelector('.swt-welcome-modal-btn');
+    const titleEl = modal.querySelector('.swt-welcome-modal-title');
+    const descEl = modal.querySelector('.swt-welcome-modal-desc');
+
+    assert(startBtn !== null, 'Start Tour button exists in modal');
+    assert(startBtn.textContent === 'Start Tour', 'Start Tour button has correct label');
+    assert(titleEl.textContent === 'Welcome to the Tour', 'Title text displayed correctly');
+    assert(descEl.textContent === 'Tap below to explore with audio.', 'Description text displayed correctly');
+
+    // User taps Start Tour button: triggers audio play and closes modal
+    assert(tour.audioPlayed === false, 'Audio not playing before user gesture');
+    startBtn.listeners['click'][0]();
+    assert(tour.audioPlayed === true, 'Clicking Start Tour immediately triggers playAudio()');
+    assert(mockDoc.getElementById('swt-welcome-modal') === null, 'Welcome modal closed after Start Tour button click');
+    assert(tour.eventsEmitted.some(e => e.name === 'tour-welcome-started'), 'tour-welcome-started event emitted');
+    assert(tour.eventsEmitted.some(e => e.name === 'tour-welcome-closed'), 'tour-welcome-closed event emitted');
+
+    // In editor mode (isEditor: true), welcome modal is suppressed so authoring is unobstructed
+    const editorMockDoc = new MockDomDocument();
+    const editorTour = new TestTourWelcomeController({
+      isEditor: true,
+      welcome: { enabled: true, title: 'Title' }
+    }, editorMockDoc);
+    editorTour.start();
+    assert(editorMockDoc.getElementById('swt-welcome-modal') === null, 'Welcome modal is suppressed in editor mode');
+  }
+
   console.log(`\n=== RESULTS: ${passCount} PASSED, ${failCount} FAILED ===\n`);
   if (failCount > 0) {
     process.exit(1);

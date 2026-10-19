@@ -1,6 +1,6 @@
 /**
  * SenangWebs Tour (SWT) - Main Library Entry Point
- * Version 1.0.3
+ * Version 1.0.22
  */
 
 import AFRAME from "aframe";
@@ -290,6 +290,12 @@ class Tour {
           this.gazeManager.onSceneLoaded();
         }
 
+        // Show welcome popup if configured and not in editor mode
+        const welcomeConfig = this.config.welcome;
+        if (!this.config.isEditor && welcomeConfig && welcomeConfig.enabled !== false) {
+          this.openWelcomeModal();
+        }
+
         // Start background audio if not in editor mode
         if (!this.config.isEditor && this.bgAudio) {
           this.playAudio().catch(() => {
@@ -365,6 +371,13 @@ class Tour {
 
         if (this.gazeManager) {
           this.gazeManager.onSceneLoaded();
+        }
+
+        // Retry playing background audio if paused (e.g. autoplay was blocked on initial load)
+        if (!this.config.isEditor && this.bgAudio && this.bgAudio.paused) {
+          this.playAudio().catch(() => {
+            this.setupAudioAutoplayUnlock();
+          });
         }
 
         return Promise.resolve();
@@ -694,6 +707,210 @@ class Tour {
   }
 
   /**
+   * Open modal view displaying a welcome dialog to greet the user and enable audio
+   * @param {Object} [welcomeData] - Optional welcome config override
+   */
+  openWelcomeModal(welcomeData = null) {
+    if (typeof document === "undefined") return;
+    this.closeWelcomeModal();
+
+    const data = welcomeData || this.config.welcome || {};
+    const title = data.title !== undefined ? data.title : "Welcome to the Tour";
+    const description = data.description !== undefined ? data.description : "Click below to begin exploring the virtual tour.";
+    const buttonText = data.buttonText || "Start Tour";
+
+    const escapeText = (str) =>
+      str ? String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;") : "";
+
+    this.ensureWelcomeModalStyles();
+
+    const modal = document.createElement("div");
+    modal.id = "swt-welcome-modal";
+    modal.className = "a-modal swt-welcome-modal-overlay";
+    modal.setAttribute("role", "dialog");
+    modal.setAttribute("aria-modal", "true");
+
+    modal.innerHTML = `
+      <div class="a-dialog swt-welcome-modal-card">
+        <button type="button" class="swt-welcome-modal-close" style="display: none;" aria-label="Close">✕</button>
+        <div class="a-dialog-text-container swt-welcome-modal-content">
+          ${title ? `<div class="a-dialog-text swt-welcome-modal-title">${escapeText(title)}</div>` : ""}
+          ${description ? `<div class="a-dialog-text swt-welcome-modal-desc">${escapeText(description)}</div>` : ""}
+        </div>
+        <div class="a-dialog-buttons-container">
+          <button type="button" class="a-dialog-button a-dialog-ok-button swt-welcome-modal-btn">${escapeText(buttonText)}</button>
+        </div>
+      </div>
+    `;
+
+    const startBtn = modal.querySelector(".swt-welcome-modal-btn");
+    startBtn?.addEventListener("click", () => {
+      if (this.bgAudio) {
+        this.playAudio().catch(() => {
+          this.setupAudioAutoplayUnlock();
+        });
+      }
+      this.closeWelcomeModal();
+      this.emit("tour-welcome-started");
+    });
+
+    const closeBtn = modal.querySelector(".swt-welcome-modal-close");
+    closeBtn?.addEventListener("click", () => this.closeWelcomeModal());
+
+    modal.addEventListener("click", (e) => {
+      if (e.target === modal) {
+        this.closeWelcomeModal();
+      }
+    });
+
+    this._onWelcomeKeyDown = (e) => {
+      if (e.key === "Escape") {
+        this.closeWelcomeModal();
+      }
+    };
+    window.addEventListener("keydown", this._onWelcomeKeyDown);
+
+    document.body.appendChild(modal);
+    this.welcomeModalEl = modal;
+    this.emit("tour-welcome-opened");
+  }
+
+  /**
+   * Close the active welcome modal view
+   */
+  closeWelcomeModal() {
+    if (this._onWelcomeKeyDown) {
+      if (typeof window !== "undefined") {
+        window.removeEventListener("keydown", this._onWelcomeKeyDown);
+      }
+      this._onWelcomeKeyDown = null;
+    }
+
+    if (this.welcomeModalEl && this.welcomeModalEl.parentNode) {
+      this.welcomeModalEl.parentNode.removeChild(this.welcomeModalEl);
+    }
+    if (typeof document !== "undefined") {
+      const existing = document.getElementById("swt-welcome-modal");
+      if (existing && existing.parentNode) {
+        existing.parentNode.removeChild(existing);
+      }
+    }
+    this.welcomeModalEl = null;
+    this.emit("tour-welcome-closed");
+  }
+
+  /**
+   * Ensure responsive CSS styles for welcome modal view exist in DOM
+   */
+  ensureWelcomeModalStyles() {
+    if (typeof document === "undefined" || document.getElementById("swt-welcome-modal-styles")) return;
+    const style = document.createElement("style");
+    style.id = "swt-welcome-modal-styles";
+    style.textContent = `
+      .swt-welcome-modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.60);
+        font-size: 14px;
+        font-weight: 600;
+        line-height: 20px;
+        z-index: 9999999;
+      }
+      .swt-welcome-modal-card {
+        position: relative;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        z-index: 199995;
+        width: 300px;
+        max-width: calc(100vw - 32px);
+        min-height: 200px;
+        box-sizing: border-box;
+        background-color: white !important;
+        color: black !important;
+        font-family: sans-serif, monospace;
+        font-size: 20px;
+        border-radius: 3px;
+        padding: 6px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+      }
+      .swt-welcome-modal-content {
+        width: 100%;
+        align-self: flex-start;
+        display: flex;
+        justify-content: center;
+        align-content: center;
+        flex-direction: column;
+        box-sizing: border-box;
+        padding: 10px 4px 6px 4px;
+      }
+      .swt-welcome-modal-title {
+        display: block;
+        font-weight: bold;
+        font-size: 13pt;
+        line-height: 1.35;
+        margin: 4px 6px 6px 6px;
+        color: black !important;
+        text-align: center;
+        font-family: sans-serif, monospace;
+      }
+      .swt-welcome-modal-desc {
+        display: block;
+        font-weight: normal;
+        font-size: 11pt;
+        line-height: 1.4;
+        margin: 4px 6px 12px 6px;
+        color: #111 !important;
+        text-align: center;
+        white-space: pre-wrap;
+        font-family: sans-serif, monospace;
+      }
+      .a-dialog-buttons-container {
+        display: inline-flex;
+        align-self: flex-end;
+        width: 100%;
+        height: 44px;
+        box-sizing: border-box;
+      }
+      .swt-welcome-modal-btn {
+        background-color: #00ceff !important;
+        color: black !important;
+        cursor: pointer;
+        align-self: center;
+        opacity: 0.9;
+        height: 38px;
+        width: 100%;
+        font-size: 12pt;
+        margin: 4px;
+        border-radius: 2px;
+        text-align: center;
+        border: none;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-family: sans-serif, monospace;
+        font-weight: normal;
+        text-decoration: none;
+        -webkit-transition: all 0.25s ease-in-out;
+        transition: all 0.25s ease-in-out;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.10), 0 1px 2px rgba(0, 0, 0, 0.20);
+        user-select: none;
+      }
+      .swt-welcome-modal-btn:hover,
+      .swt-welcome-modal-btn:active {
+        box-shadow: 0 7px 14px rgba(0,0,0,0.20), 0 2px 2px rgba(0,0,0,0.20);
+        opacity: 1;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  /**
    * Set camera to a starting position immediately
    * Uses look-controls internal pitchObject/yawObject for proper A-Frame compatibility
    * @param {Object} startingPosition - Object with pitch and yaw in radians
@@ -808,8 +1025,9 @@ class Tour {
       this.mouseCursorEl = null;
     }
 
-    // Clean up photo modal if open
+    // Clean up modals if open
     this.closePhotoModal();
+    this.closeWelcomeModal();
 
     // Clean up background audio
     this.cleanupAudio();
@@ -832,7 +1050,39 @@ class Tour {
     this.cleanupAudio();
 
     try {
-      const audio = new AudioConstructor(this.config.audio.url);
+      let audioSrc = this.config.audio.url;
+      // Convert large Base64 data URLs to Blob URLs for fast native streaming on mobile (Android/iOS)
+      if (
+        typeof audioSrc === "string" &&
+        audioSrc.startsWith("data:audio/") &&
+        typeof window !== "undefined" &&
+        window.Blob &&
+        window.URL &&
+        window.URL.createObjectURL
+      ) {
+        try {
+          const commaIndex = audioSrc.indexOf(",");
+          if (commaIndex !== -1) {
+            const header = audioSrc.slice(0, commaIndex);
+            const base64Data = audioSrc.slice(commaIndex + 1);
+            const mimeMatch = header.match(/:(.*?);/);
+            const mime = mimeMatch ? mimeMatch[1] : "audio/mp3";
+            const binaryStr = atob(base64Data);
+            const len = binaryStr.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+              bytes[i] = binaryStr.charCodeAt(i);
+            }
+            const blob = new Blob([bytes], { type: mime });
+            audioSrc = URL.createObjectURL(blob);
+            this.audioBlobUrl = audioSrc;
+          }
+        } catch (convErr) {
+          console.warn("Failed to convert audio data URL to Blob URL:", convErr);
+        }
+      }
+
+      const audio = new AudioConstructor(audioSrc);
       audio.loop = this.config.audio.loop !== false;
       const vol =
         typeof this.config.audio.volume === "number"
@@ -925,7 +1175,9 @@ class Tour {
     const wasPlaying = Boolean(this.bgAudio && !this.bgAudio.paused);
     this.setupBackgroundAudio();
     if (wasPlaying) {
-      this.playAudio().catch(() => {});
+      this.playAudio().catch(() => {
+        this.setupAudioAutoplayUnlock();
+      });
     }
   }
 
@@ -933,7 +1185,7 @@ class Tour {
    * Listen for user gesture to unlock autoplay if initial play was blocked
    */
   setupAudioAutoplayUnlock() {
-    if (this.boundUnlockAudio || !this.bgAudio || typeof document === "undefined") return;
+    if (this.boundUnlockAudio || !this.bgAudio || typeof window === "undefined") return;
 
     this.boundUnlockAudio = () => {
       if (this.bgAudio) {
@@ -941,23 +1193,36 @@ class Tour {
           .then(() => {
             this.removeAudioAutoplayUnlock();
           })
-          .catch(() => {});
+          .catch(() => {
+            // Keep unlock listeners active until audio successfully starts playing
+          });
       }
     };
 
-    document.addEventListener("click", this.boundUnlockAudio, { once: true });
-    document.addEventListener("touchstart", this.boundUnlockAudio, { once: true });
-    document.addEventListener("keydown", this.boundUnlockAudio, { once: true });
+    const events = ["click", "touchend", "pointerup", "keydown"];
+    this._audioUnlockEvents = events;
+    events.forEach((evtName) => {
+      window.addEventListener(evtName, this.boundUnlockAudio, { capture: true, passive: true });
+      if (typeof document !== "undefined") {
+        document.addEventListener(evtName, this.boundUnlockAudio, { capture: true, passive: true });
+      }
+    });
   }
 
   /**
    * Remove autoplay unlock listeners
    */
   removeAudioAutoplayUnlock() {
-    if (this.boundUnlockAudio && typeof document !== "undefined") {
-      document.removeEventListener("click", this.boundUnlockAudio);
-      document.removeEventListener("touchstart", this.boundUnlockAudio);
-      document.removeEventListener("keydown", this.boundUnlockAudio);
+    if (this.boundUnlockAudio) {
+      const events = this._audioUnlockEvents || ["click", "touchend", "pointerup", "keydown"];
+      events.forEach((evtName) => {
+        if (typeof window !== "undefined") {
+          window.removeEventListener(evtName, this.boundUnlockAudio, { capture: true });
+        }
+        if (typeof document !== "undefined") {
+          document.removeEventListener(evtName, this.boundUnlockAudio, { capture: true });
+        }
+      });
       this.boundUnlockAudio = null;
     }
   }
@@ -967,6 +1232,12 @@ class Tour {
    */
   cleanupAudio() {
     this.removeAudioAutoplayUnlock();
+    if (this.audioBlobUrl && typeof URL !== "undefined" && URL.revokeObjectURL) {
+      try {
+        URL.revokeObjectURL(this.audioBlobUrl);
+      } catch (err) {}
+      this.audioBlobUrl = null;
+    }
     if (this.bgAudio) {
       try {
         this.bgAudio.pause();

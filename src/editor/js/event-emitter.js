@@ -49,6 +49,7 @@ export const EditorEvents = {
   TOUR_TITLE_CHANGE: 'tour:titleChange',
   TOUR_DESCRIPTION_CHANGE: 'tour:descriptionChange',
   TOUR_AUDIO_CHANGE: 'tour:audioChange',
+  TOUR_WELCOME_CHANGE: 'tour:welcomeChange',
   
   // Preview events
   PREVIEW_START: 'preview:start',
@@ -227,6 +228,8 @@ class EventEmitter {
       EditorEvents.INITIAL_SCENE_CHANGE,
       EditorEvents.TOUR_TITLE_CHANGE,
       EditorEvents.TOUR_DESCRIPTION_CHANGE,
+      EditorEvents.TOUR_AUDIO_CHANGE,
+      EditorEvents.TOUR_WELCOME_CHANGE,
       EditorEvents.PROJECT_LOAD,
       EditorEvents.PROJECT_IMPORT,
       EditorEvents.PROJECT_NEW,

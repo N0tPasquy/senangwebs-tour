@@ -695,6 +695,7 @@
       TOUR_TITLE_CHANGE: 'tour:titleChange',
       TOUR_DESCRIPTION_CHANGE: 'tour:descriptionChange',
       TOUR_AUDIO_CHANGE: 'tour:audioChange',
+      TOUR_WELCOME_CHANGE: 'tour:welcomeChange',
       
       // Preview events
       PREVIEW_START: 'preview:start',
@@ -873,6 +874,8 @@
           EditorEvents.INITIAL_SCENE_CHANGE,
           EditorEvents.TOUR_TITLE_CHANGE,
           EditorEvents.TOUR_DESCRIPTION_CHANGE,
+          EditorEvents.TOUR_AUDIO_CHANGE,
+          EditorEvents.TOUR_WELCOME_CHANGE,
           EditorEvents.PROJECT_LOAD,
           EditorEvents.PROJECT_IMPORT,
           EditorEvents.PROJECT_NEW,
@@ -1465,6 +1468,14 @@
           loop: config.audio.loop !== false,
         };
       }
+      if (config.welcome && config.welcome.enabled !== false && (config.welcome.enabled || config.welcome.title || config.welcome.description)) {
+        tourConfig.welcome = {
+          enabled: config.welcome.enabled !== false,
+          title: config.welcome.title || '',
+          description: config.welcome.description || '',
+          buttonText: config.welcome.buttonText || 'Start Tour',
+        };
+      }
 
       return tourConfig;
     }
@@ -1482,7 +1493,8 @@
           initialSceneId: currentScene.id,
           title: extraConfig.title,
           description: extraConfig.description,
-          audio: extraConfig.audio
+          audio: extraConfig.audio,
+          welcome: extraConfig.welcome
         },
         allScenes
       );
@@ -5420,6 +5432,34 @@
           if (audioStatus) audioStatus.style.display = "none";
         }
 
+        // Welcome popup properties
+        const welcomeEnabled = this.getEl("tourWelcomeEnabled");
+        const welcomeFields = this.getEl("tourWelcomeFields");
+        const welcomeTitle = this.getEl("tourWelcomeTitle");
+        const welcomeDesc = this.getEl("tourWelcomeDesc");
+        const welcomeBtnText = this.getEl("tourWelcomeBtnText");
+
+        const isWelcomeOn = Boolean(
+          config.welcome &&
+            config.welcome.enabled !== false &&
+            (config.welcome.enabled || config.welcome.title || config.welcome.description)
+        );
+        if (welcomeEnabled) {
+          welcomeEnabled.checked = isWelcomeOn;
+        }
+        if (welcomeFields) {
+          welcomeFields.style.display = isWelcomeOn ? "block" : "none";
+        }
+        if (welcomeTitle) {
+          welcomeTitle.value = config.welcome?.title || "";
+        }
+        if (welcomeDesc) {
+          welcomeDesc.value = config.welcome?.description || "";
+        }
+        if (welcomeBtnText) {
+          welcomeBtnText.value = config.welcome?.buttonText || "";
+        }
+
         // Also update project name in header if it exists
         const projectName = this.getEl("project-name");
         if (projectName) {
@@ -5662,7 +5702,7 @@
       }
     }
 
-    var version = "1.0.21";
+    var version = "1.0.22";
     var packageInfo = {
     	version: version};
 
@@ -5730,6 +5770,16 @@
             };
           } else {
             delete this.editor.config.audio;
+          }
+          if (tourData.welcome && tourData.welcome.enabled !== false && (tourData.welcome.enabled || tourData.welcome.title || tourData.welcome.description)) {
+            this.editor.config.welcome = {
+              enabled: tourData.welcome.enabled !== false,
+              title: tourData.welcome.title || '',
+              description: tourData.welcome.description || '',
+              buttonText: tourData.welcome.buttonText || 'Start Tour'
+            };
+          } else {
+            delete this.editor.config.welcome;
           }
 
           // Reset preview and selection state so the new project renders cleanly
@@ -6656,6 +6706,58 @@
                 this.markUnsavedChanges();
                 this.emit(EditorEvents.TOUR_AUDIO_CHANGE, { audio: this.config.audio });
             });
+
+            // Tour Welcome Popup
+            document.getElementById('tourWelcomeEnabled')?.addEventListener('change', (e) => {
+                const isChecked = e.target.checked;
+                if (isChecked) {
+                    if (!this.config.welcome) {
+                        this.config.welcome = {
+                            enabled: true,
+                            title: document.getElementById('tourWelcomeTitle')?.value || 'Welcome to the Tour',
+                            description: document.getElementById('tourWelcomeDesc')?.value || '',
+                            buttonText: document.getElementById('tourWelcomeBtnText')?.value || 'Start Tour'
+                        };
+                    } else {
+                        this.config.welcome.enabled = true;
+                    }
+                } else {
+                    if (this.config.welcome) {
+                        this.config.welcome.enabled = false;
+                    }
+                }
+                const fields = document.getElementById('tourWelcomeFields');
+                if (fields) fields.style.display = isChecked ? 'block' : 'none';
+                this.markUnsavedChanges();
+                this.emit(EditorEvents.TOUR_WELCOME_CHANGE, { welcome: this.config.welcome });
+            });
+
+            document.getElementById('tourWelcomeTitle')?.addEventListener('input', debounce((e) => {
+                if (!this.config.welcome) {
+                    this.config.welcome = { enabled: true, title: '', description: '', buttonText: 'Start Tour' };
+                }
+                this.config.welcome.title = e.target.value;
+                this.markUnsavedChanges();
+                this.emit(EditorEvents.TOUR_WELCOME_CHANGE, { welcome: this.config.welcome });
+            }, 300));
+
+            document.getElementById('tourWelcomeDesc')?.addEventListener('input', debounce((e) => {
+                if (!this.config.welcome) {
+                    this.config.welcome = { enabled: true, title: 'Welcome to the Tour', description: '', buttonText: 'Start Tour' };
+                }
+                this.config.welcome.description = e.target.value;
+                this.markUnsavedChanges();
+                this.emit(EditorEvents.TOUR_WELCOME_CHANGE, { welcome: this.config.welcome });
+            }, 300));
+
+            document.getElementById('tourWelcomeBtnText')?.addEventListener('input', debounce((e) => {
+                if (!this.config.welcome) {
+                    this.config.welcome = { enabled: true, title: 'Welcome to the Tour', description: '', buttonText: 'Start Tour' };
+                }
+                this.config.welcome.buttonText = e.target.value;
+                this.markUnsavedChanges();
+                this.emit(EditorEvents.TOUR_WELCOME_CHANGE, { welcome: this.config.welcome });
+            }, 300));
 
             document.getElementById('exportJsonBtn')?.addEventListener('click', () => {
                 this.exportManager.exportJSON();

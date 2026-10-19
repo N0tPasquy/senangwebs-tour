@@ -1,6 +1,6 @@
 {
   "name": "senangwebs-tour",
-  "version": "1.0.21",
+  "version": "1.0.22",
   "type": "module",
   "description": "VR 360° virtual tour system with visual editor and viewer library",
   "main": "dist/swt.cjs",

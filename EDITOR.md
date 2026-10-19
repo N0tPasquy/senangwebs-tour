@@ -359,8 +359,21 @@ if (editor.previewController?.tourInstance) {
 ```
 
 - **Output Volume Scaling:** The runtime automatically scales output volume with a `0.35` multiplier (`actualVolume = volume * 0.35`). A baseline slider value of `1.0` (100%) maps to `0.35` (35%) actual audio output, and the default `0.5` (50%) maps to `0.175` (17.5%), ensuring background audio remains ambient and never overpowers the user.
+- **Mobile & Blob Streaming Optimization:** Large Base64 audio data URLs are automatically converted into in-memory `Blob` URLs (`URL.createObjectURL`), bypassing mobile browser memory limits and preventing decoding freezes on Android and iOS devices.
+- **Mobile Autoplay Policy Handling:** If direct autoplay is restricted on initial page load, high-priority capture-phase listeners (`touchend`, `pointerup`, `click`, `keydown`) seamlessly start playback on the user's first touch or interaction. Playback is also re-verified on scene transitions.
 - **Preview Integration:** When toggling the preview mode (`previewBtn`), background audio automatically starts playing and immediately pauses upon exiting preview mode (or pressing Escape).
 - **Import/Export:** `exportManager.generateJSON()` includes the `audio` configuration, and `exportManager.loadJSON(data)` restores both the audio state and UI controls automatically.
+
+### Welcome Popup (Audio Activation on Mobile)
+
+The editor allows configuring an introductory welcome modal dialog for standalone/exported tours:
+- **Audio Activation Gesture:** On mobile browsers (such as Android Chrome and iOS Safari), autoplaying audio requires an explicit user gesture (`click` or `touchend`). Tapping the "Start Tour" button in the welcome popup satisfies this requirement and immediately initiates background audio playback without relying on accidental screen touches.
+- **Configurable Fields:**
+  - `tourWelcomeEnabled` (checkbox): Turn the welcome modal on or off.
+  - `tourWelcomeTitle` (text): Modal title (e.g. `"Welcome to the Tour"`).
+  - `tourWelcomeDesc` (textarea): Introductory description / instructions.
+  - `tourWelcomeBtnText` (text): Button text (e.g. `"Start Tour"`).
+- **Suppressed in Editor Mode:** To keep the authoring environment clean, the welcome modal is suppressed while in editor preview mode (`isEditor: true`). It displays automatically upon launch in exported tours.
 
 ### Custom Export
 
@@ -706,6 +719,10 @@ The editor and viewer now use the **same data format**. Scenes are stored as an 
 | `audio.url` | Top level | Audio URL or base64 data URL for looping soundtrack |
 | `audio.volume` | Top level | Baseline volume (`0.0`–`1.0`, default `0.5`, runtime scales by 0.35 ceiling) |
 | `audio.loop` | Top level | Continuous loop flag (default: `true`) |
+| `welcome.enabled` | Top level | Welcome modal active flag (default: `true` when welcome block present) |
+| `welcome.title` | Top level | Header title for introductory welcome modal |
+| `welcome.description` | Top level | Message body text for introductory welcome modal |
+| `welcome.buttonText` | Top level | Action button text (default: `"Start Tour"`) |
 | `panorama` | Scene | Image URL or base64 data URL (max 8192px) |
 | `action.type` | Hotspot | `"navigateTo"`, `"gazeNavigate"`, or `"photo"` |
 | `action.target` | Hotspot | Target scene ID (for `navigateTo` & `gazeNavigate`) |

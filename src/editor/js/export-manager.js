@@ -68,6 +68,16 @@ class ExportManager {
       } else {
         delete this.editor.config.audio;
       }
+      if (tourData.welcome && tourData.welcome.enabled !== false && (tourData.welcome.enabled || tourData.welcome.title || tourData.welcome.description)) {
+        this.editor.config.welcome = {
+          enabled: tourData.welcome.enabled !== false,
+          title: tourData.welcome.title || '',
+          description: tourData.welcome.description || '',
+          buttonText: tourData.welcome.buttonText || 'Start Tour'
+        };
+      } else {
+        delete this.editor.config.welcome;
+      }
 
       // Reset preview and selection state so the new project renders cleanly
       this.editor.hotspotEditor.currentHotspotIndex = -1;

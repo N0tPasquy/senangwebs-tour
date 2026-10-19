@@ -39,6 +39,7 @@ A powerful, data-driven 360° virtual tour system built on A-Frame WebVR. Create
 - **Gaze Image Hotspots** - Immersive navigation hotspots displaying a custom photo that zooms in over the gaze duration to fill the view, transitioning into the next scene
 - **Static 3D Photos & In-Scene Cards** - Photos placed in 3D space with native aspect ratio; hands-free VR "In grande" 3D card view (photo on left, title & description on right, close 'X' with 2-second gaze countdown)
 - **Background Audio Loop** - Seamless looping ambient audio track with a comfortable scaled volume ceiling (35% maximum output for non-intrusive listening), live volume adjustments, and automatic autoplay policy unlocking on user interaction
+- **Welcome Popup (Mobile Audio Activation)** - Customizable greeting modal appearing upon tour launch. Tapping "Start Tour" provides the explicit user gesture required by mobile browsers (iOS & Android) to reliably unlock audio playback
 - **Dynamic Hotspot Scaling** - Scale hotspots and photos with proportional title position and dimension adjustment
 - **Customizable Hotspots** - Custom icons, colors, scales, and title text
 - **Multiple Export Formats** - JSON configuration or standalone HTML files
@@ -302,6 +303,12 @@ Both the editor and viewer use the same data format. Scenes are stored as an **a
     volume: 0.5,                   // Optional: Baseline volume (0.0 to 1.0, default: 0.5)
     loop: true                     // Optional: Loop playback continuously (default: true)
   },
+  welcome: {                       // Optional: Welcome popup configuration
+    enabled: true,                 // Optional: Enable or disable popup (default: true when present)
+    title: "Welcome to the Tour",  // Optional: Popup header title
+    description: "Explore the virtual tour. Click below to begin with sound.", // Optional: Popup body text
+    buttonText: "Start Tour"       // Optional: Button label (default: "Start Tour")
+  },
   scenes: [                        // Required: Array of scenes
     {
       id: "scene-id",              // Required: Scene identifier
@@ -354,6 +361,9 @@ Both the editor and viewer use the same data format. Scenes are stored as an **a
 - The library also accepts `scenes` as an object keyed by ID for backward compatibility
 - Hotspot `position` is in 3D space (typically on 10-unit sphere surface)
 - `audio.volume` represents baseline volume (`0.0`–`1.0`, default `0.5`). To guarantee a comfortable, non-intrusive ambient background soundtrack, the runtime scales actual output volume by `0.35` (`actualOutputVolume = volume * 0.35`). For example, 100% slider outputs 35% actual volume, and 50% default outputs 17.5% volume.
+- `audio.url` supports regular URLs or Base64 data URLs (`data:audio/...`). Base64 data URLs are automatically converted in-memory into native `Blob` URLs (`URL.createObjectURL`), eliminating mobile memory spikes and audio decoding stalls.
+- Background audio playback adheres to browser Autoplay Policies: if direct autoplay is blocked on initial load, high-priority capture event listeners (`touchend`, `pointerup`, `click`, `keydown`) seamlessly unlock playback on the first user interaction, and playback is re-checked upon each scene transition.
+- `welcome` popup displays automatically when `!isEditor && welcome && welcome.enabled !== false`. Tapping the "Start Tour" action button acts as a direct user gesture, immediately starting audio playback via `tour.playAudio()` and unlocking mobile browser autoplay.
 
 ---
 
@@ -461,7 +471,7 @@ Close the active photo modal dialog and clean up DOM listeners.
 
 ##### `tour.playAudio()`
 
-Play or resume the looping background audio. Resolves when audio playback begins. If playback is blocked by browser autoplay policy, it automatically starts upon the user's first touch, click, or key press.
+Play or resume the looping background audio. Resolves when audio playback begins. If playback is blocked by browser autoplay policy (standard on mobile devices without prior interaction), capture-phase listeners (`touchend`, `pointerup`, `click`, `keydown`) will automatically start playback on the user's first touch or interaction. Playback is also re-verified on scene transitions.
 
 **Returns:** `Promise<void>`
 
@@ -555,6 +565,26 @@ Stop playback, release audio resources, and remove autoplay unlock event listene
 
 ---
 
+##### `tour.openWelcomeModal(welcomeData)`
+
+Open the welcome dialog modal. Calling "Start Tour" inside the dialog starts background audio.
+
+**Parameters:**
+
+- `welcomeData` (Object, optional) - Custom welcome modal config (`title`, `description`, `buttonText`)
+
+**Returns:** `void`
+
+---
+
+##### `tour.closeWelcomeModal()`
+
+Close the active welcome modal dialog.
+
+**Returns:** `void`
+
+---
+
 ##### `tour.addEventListener(eventName, callback)`
 
 Listen to tour events. Custom event system (not DOM events).
@@ -637,6 +667,24 @@ Fired when a hotspot is clicked/activated.
 
 ---
 
+##### `tour-welcome-opened`
+
+Fired when the welcome popup modal is opened.
+
+---
+
+##### `tour-welcome-started`
+
+Fired when the user clicks the "Start Tour" button in the welcome popup to begin the tour and start audio.
+
+---
+
+##### `tour-welcome-closed`
+
+Fired when the welcome popup modal is closed.
+
+---
+
 #### Usage Example
 
 ```javascript
@@ -708,6 +756,7 @@ setTimeout(() => {
 - **Protected Editor Mode** - Gaze countdowns and automatic navigation are safely deactivated in editor preview to prevent accidental scene changes while authoring
 - **Manual "Go" Navigation** - Explicit `➔ Go` button in the sidebar to test scene transitions on demand
 - **Background Audio Track** - Upload audio tracks (MP3/WAV/OGG converted to Base64 data URLs) or link external audio stream URLs. Includes a live volume slider (0% to 100%, defaulting to 50%), real-time percentage readout, one-click track removal, and automatic preview audio playback (plays when previewing, pauses on preview exit or Escape)
+- **Welcome Popup Settings** - Enable or disable a launch modal greeting in the Tour settings section. Customize the popup title, description message, and button text (e.g. "Start Tour") to give users a tailored intro and reliably activate audio on mobile devices
 
 ### Hotspot Configuration & Types
 

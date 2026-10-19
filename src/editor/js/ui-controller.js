@@ -692,6 +692,34 @@ class UIController {
       if (audioStatus) audioStatus.style.display = "none";
     }
 
+    // Welcome popup properties
+    const welcomeEnabled = this.getEl("tourWelcomeEnabled");
+    const welcomeFields = this.getEl("tourWelcomeFields");
+    const welcomeTitle = this.getEl("tourWelcomeTitle");
+    const welcomeDesc = this.getEl("tourWelcomeDesc");
+    const welcomeBtnText = this.getEl("tourWelcomeBtnText");
+
+    const isWelcomeOn = Boolean(
+      config.welcome &&
+        config.welcome.enabled !== false &&
+        (config.welcome.enabled || config.welcome.title || config.welcome.description)
+    );
+    if (welcomeEnabled) {
+      welcomeEnabled.checked = isWelcomeOn;
+    }
+    if (welcomeFields) {
+      welcomeFields.style.display = isWelcomeOn ? "block" : "none";
+    }
+    if (welcomeTitle) {
+      welcomeTitle.value = config.welcome?.title || "";
+    }
+    if (welcomeDesc) {
+      welcomeDesc.value = config.welcome?.description || "";
+    }
+    if (welcomeBtnText) {
+      welcomeBtnText.value = config.welcome?.buttonText || "";
+    }
+
     // Also update project name in header if it exists
     const projectName = this.getEl("project-name");
     if (projectName) {
