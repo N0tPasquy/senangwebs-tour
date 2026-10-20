@@ -1,4 +1,4 @@
-(function () {
+var SWTEditor = (function () {
     'use strict';
 
     // Utility Functions
@@ -188,17 +188,6 @@
     }
 
     /**
-     * Format file size
-     */
-    function formatFileSize(bytes) {
-        if (bytes === 0) return '0 Bytes';
-        const k = 1024;
-        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
-    }
-
-    /**
      * Download text as file
      */
     function downloadTextAsFile(text, filename) {
@@ -250,29 +239,6 @@
     }
 
     /**
-     * Convert position object to string
-     */
-    function positionToString(pos) {
-        return `${pos.x.toFixed(1)} ${pos.y.toFixed(1)} ${pos.z.toFixed(1)}`;
-    }
-
-    /**
-     * Parse position string to object
-     */
-    function parsePosition(str) {
-        const parts = str.split(' ').map(Number);
-        return { x: parts[0] || 0, y: parts[1] || 0, z: parts[2] || 0 };
-    }
-
-    /**
-     * Validate email
-     */
-    function isValidEmail(email) {
-        const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        return re.test(email);
-    }
-
-    /**
      * Deep clone object
      */
     function deepClone(obj) {
@@ -286,14 +252,10 @@
         deepClone: deepClone,
         downloadTextAsFile: downloadTextAsFile,
         escapeHtml: escapeHtml,
-        formatFileSize: formatFileSize,
         generateId: generateId,
         generateThumbnail: generateThumbnail,
         hideModal: hideModal$1,
-        isValidEmail: isValidEmail,
         loadImageAsDataUrl: loadImageAsDataUrl,
-        parsePosition: parsePosition,
-        positionToString: positionToString,
         safeJsonStringify: safeJsonStringify,
         sanitizeId: sanitizeId$1,
         showModal: showModal,
@@ -5667,9 +5629,14 @@
                 }
               });
 
-              // Convert SVG to data URL
+              // Convert SVG to data URL safely without deprecated unescape
               const svgString = new XMLSerializer().serializeToString(svgClone);
-              const dataUrl = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgString)));
+              const bytes = new TextEncoder().encode(svgString);
+              let binary = '';
+              for (let i = 0; i < bytes.length; i++) {
+                binary += String.fromCharCode(bytes[i]);
+              }
+              const dataUrl = 'data:image/svg+xml;base64,' + btoa(binary);
               
               // Cache the result
               this.iconCache.set(cacheKey, dataUrl);

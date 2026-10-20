@@ -12,6 +12,7 @@ import { SceneManager } from "./SceneManager.js";
 import { HotspotManager } from "./HotspotManager.js";
 import { IconRenderer } from "./IconRenderer.js";
 import { GazeManager, isGazeHotspot } from "./GazeManager.js";
+import { escapeText } from "./utils.js";
 
 /**
  * Main Tour class - The public API for the SWT library
@@ -203,11 +204,13 @@ class Tour {
       };
 
       disableFuse();
-      cursor.addEventListener("componentinitialized", (evt) => {
+      this._cursorEl = cursor;
+      this._boundDisableFuse = (evt) => {
         if (evt.detail?.name === "cursor") {
           disableFuse();
         }
-      });
+      };
+      cursor.addEventListener("componentinitialized", this._boundDisableFuse);
 
       if (this.sceneEl.hasLoaded) {
         disableFuse();
@@ -482,9 +485,6 @@ class Tour {
       hotspotData?.autoCloseDuration ??
       0;
 
-    const escapeText = (str) =>
-      str ? String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;") : "";
-
     this.ensurePhotoModalStyles();
 
     const modal = document.createElement("div");
@@ -718,9 +718,6 @@ class Tour {
     const title = data.title !== undefined ? data.title : "Welcome to the Tour";
     const description = data.description !== undefined ? data.description : "Click below to begin exploring the virtual tour.";
     const buttonText = data.buttonText || "Start Tour";
-
-    const escapeText = (str) =>
-      str ? String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;") : "";
 
     this.ensureWelcomeModalStyles();
 
@@ -1025,6 +1022,13 @@ class Tour {
       this.mouseCursorEl = null;
     }
 
+    // Clean up cursor component listener
+    if (this._cursorEl && this._boundDisableFuse) {
+      this._cursorEl.removeEventListener("componentinitialized", this._boundDisableFuse);
+      this._boundDisableFuse = null;
+      this._cursorEl = null;
+    }
+
     // Clean up modals if open
     this.closePhotoModal();
     this.closeWelcomeModal();
@@ -1138,7 +1142,7 @@ class Tour {
   }
 
   /**
-   * Set audio volume (0.0 to 1.0, scaled relative to 50% max output volume)
+   * Set audio volume (0.0 to 1.0, scaled relative to 35% max output volume)
    * @param {number} vol
    */
   setAudioVolume(vol) {

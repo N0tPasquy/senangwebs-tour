@@ -185,17 +185,6 @@ function hideModal(modalId) {
 }
 
 /**
- * Format file size
- */
-function formatFileSize(bytes) {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
-}
-
-/**
  * Download text as file
  */
 function downloadTextAsFile(text, filename) {
@@ -247,29 +236,6 @@ function debounce(func, wait) {
 }
 
 /**
- * Convert position object to string
- */
-function positionToString(pos) {
-    return `${pos.x.toFixed(1)} ${pos.y.toFixed(1)} ${pos.z.toFixed(1)}`;
-}
-
-/**
- * Parse position string to object
- */
-function parsePosition(str) {
-    const parts = str.split(' ').map(Number);
-    return { x: parts[0] || 0, y: parts[1] || 0, z: parts[2] || 0 };
-}
-
-/**
- * Validate email
- */
-function isValidEmail(email) {
-    const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return re.test(email);
-}
-
-/**
  * Deep clone object
  */
 function deepClone(obj) {
@@ -284,13 +250,9 @@ export {
     showToast,
     showModal,
     hideModal,
-    formatFileSize,
     downloadTextAsFile,
     copyToClipboard,
     debounce,
-    positionToString,
-    parsePosition,
-    isValidEmail,
     deepClone,
     escapeHtml,
     safeJsonStringify

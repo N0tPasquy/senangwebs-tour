@@ -1,12 +1,4 @@
-const requestAnimFrame =
-  (typeof window !== 'undefined' && window.requestAnimationFrame) ||
-  (typeof requestAnimationFrame !== 'undefined' ? requestAnimationFrame : null) ||
-  ((fn) => setTimeout(fn, 16));
-
-const cancelAnimFrame =
-  (typeof window !== 'undefined' && window.cancelAnimationFrame) ||
-  (typeof cancelAnimationFrame !== 'undefined' ? cancelAnimationFrame : null) ||
-  ((id) => clearTimeout(id));
+import { requestAnimFrame, cancelAnimFrame } from './utils.js';
 
 export class GazeManager {
   /**

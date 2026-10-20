@@ -1,6 +1,8 @@
 /**
  * A-Frame component that listens for clicks on hotspots and emits a custom event
  */
+import { normalizeScale } from '../utils.js';
+
 if (typeof AFRAME !== 'undefined') {
   AFRAME.registerComponent('swt-hotspot-listener', {
     schema: {
@@ -116,28 +118,6 @@ if (typeof AFRAME !== 'undefined') {
       return `${parts[0] * multiplier} ${parts[1] * multiplier} ${parts[2] * multiplier}`;
     }
   });
-
-  /**
-   * Normalize a scale value to the "x y z" string form.
-   * Accepts numbers (1.5 -> "1.5 1.5 1.5"), single-component strings,
-   * and full "x y z" vectors. Falls back to "1 1 1" for invalid input.
-   */
-  function normalizeScale(value) {
-    if (value === undefined || value === null || value === '') {
-      return '1 1 1';
-    }
-    if (typeof value === 'number' && isFinite(value)) {
-      return `${value} ${value} ${value}`;
-    }
-    if (typeof value === 'string') {
-      const parts = value.trim().split(/\s+/).map(Number);
-      if (parts.length >= 1 && parts.every((n) => isFinite(n) && n > 0)) {
-        const [x, y = x, z = x] = parts;
-        return `${x} ${y} ${z}`;
-      }
-    }
-    return '1 1 1';
-  }
 
   /**
    * Billboard component - Makes an entity always face the camera

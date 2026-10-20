@@ -6,9 +6,9 @@ import postcssImport from 'postcss-import';
 
 const production = !process.env.ROLLUP_WATCH;
 
-// Suppress "this is undefined" warning from UMD libraries
+// Suppress "this is undefined" warning from UMD libraries and CSS extraction conflicts
 const onwarn = (warning, warn) => {
-  if (warning.code === 'THIS_IS_UNDEFINED') return;
+  if (warning.code === 'THIS_IS_UNDEFINED' || warning.code === 'FILE_NAME_CONFLICT') return;
   warn(warning);
 };
 
@@ -77,6 +77,7 @@ export default [
     output: {
       file: 'dist/swt-editor.js',
       format: 'iife',
+      name: 'SWTEditor',
       sourcemap: true
     },
     plugins: [
@@ -90,6 +91,7 @@ export default [
     output: {
       file: 'dist/swt-editor.min.js',
       format: 'iife',
+      name: 'SWTEditor',
       sourcemap: false
     },
     plugins: [
@@ -106,12 +108,13 @@ export default [
     },
     plugins: [
       postcss({
-        extract: true,
+        extract: 'swt-editor.css',
         minimize: false,
         sourceMap: true,
         plugins: [postcssImport()]
       })
-    ]
+    ],
+    onwarn
   },
   // Editor - CSS bundle (minified)
   {
@@ -121,11 +124,12 @@ export default [
     },
     plugins: [
       postcss({
-        extract: true,
+        extract: 'swt-editor.min.css',
         minimize: true,
         sourceMap: false,
         plugins: [postcssImport()]
       })
-    ]
+    ],
+    onwarn
   }
 ];

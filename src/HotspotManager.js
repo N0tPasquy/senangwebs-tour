@@ -1,4 +1,5 @@
 import { isGazeHotspot } from './GazeManager.js';
+import { normalizeScale } from './utils.js';
 
 export class HotspotManager {
   constructor(sceneEl, assetManager, defaultHotspotSettings = {}, iconRenderer = null) {
@@ -399,7 +400,8 @@ export class HotspotManager {
         hotspotData: JSON.stringify(hotspot),
         isEditor: isEditor
       });
-    } else if (isEditor) {
+    } else {
+      // Standard clickable hotspot (both in editor and standalone viewer)
       visualEl.setAttribute('class', 'clickable');
       visualEl.setAttribute('swt-hotspot-listener', {
         hotspotData: JSON.stringify(hotspot)
@@ -413,26 +415,12 @@ export class HotspotManager {
 
   /**
    * Normalize a scale value to the "x y z" string form.
-   * Accepts numbers, single-component strings, and full "x y z" vectors.
-   * Must stay in sync with the normalization in swt-hotspot-listener.
+   * Delegates to shared utility normalizeScale.
    * @param {number|string} value
    * @returns {string}
    */
   normalizeScale(value) {
-    if (value === undefined || value === null || value === '') {
-      return '1 1 1';
-    }
-    if (typeof value === 'number' && isFinite(value)) {
-      return `${value} ${value} ${value}`;
-    }
-    if (typeof value === 'string') {
-      const parts = value.trim().split(/\s+/).map(Number);
-      if (parts.length >= 1 && parts.every((n) => isFinite(n) && n > 0)) {
-        const [x, y = x, z = x] = parts;
-        return `${x} ${y} ${z}`;
-      }
-    }
-    return '1 1 1';
+    return normalizeScale(value);
   }
 
   /**

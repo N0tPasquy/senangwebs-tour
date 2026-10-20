@@ -41,8 +41,6 @@
     "@rollup/plugin-json": "^6.1.0",
     "@rollup/plugin-node-resolve": "^15.2.3",
     "@rollup/plugin-terser": "^1.0.0",
-    "@rollup/plugin-virtual": "^3.0.2",
-    "concat-with-sourcemaps": "^1.1.0",
     "http-server": "^14.1.1",
     "postcss-import": "^16.1.1",
     "rollup": "^4.9.6",

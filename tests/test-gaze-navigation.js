@@ -1722,6 +1722,31 @@ async function runTests() {
     assert(editorMockDoc.getElementById('swt-welcome-modal') === null, 'Welcome modal is suppressed in editor mode');
   }
 
+  // Scenario 39: Standard hotspot clickable listener in standalone viewer mode
+  console.log('\nTest 39: Standard hotspot click attachment in standalone viewer mode');
+  {
+    const sceneEl = new MockElement('a-scene');
+    const assetManager = { addAsset: () => {} };
+    const hotspotManager = new HotspotManager(sceneEl, assetManager);
+    hotspotManager.tour = { config: { isEditor: false } };
+
+    const standardHotspot = {
+      id: 'hs-nav-std',
+      position: { x: 0, y: 1.5, z: -3 },
+      action: { type: 'navigateTo', target: 'scene-2' },
+      appearance: { icon: 'arrow-right' }
+    };
+
+    hotspotManager.createHotspot(standardHotspot, 0);
+
+    const hotspotEl = sceneEl.children[0];
+    assert(hotspotEl !== undefined, 'Standard hotspot entity created in scene');
+
+    const visualEl = hotspotEl.children[0];
+    assert(visualEl.classList.has('clickable'), 'Standard hotspot has clickable class in viewer mode');
+    assert(visualEl.hasAttribute('swt-hotspot-listener'), 'Standard hotspot has swt-hotspot-listener in viewer mode');
+  }
+
   console.log(`\n=== RESULTS: ${passCount} PASSED, ${failCount} FAILED ===\n`);
   if (failCount > 0) {
     process.exit(1);

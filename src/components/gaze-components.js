@@ -3,6 +3,9 @@
  */
 import AFRAME from 'aframe';
 import { StaticPhotoController } from '../StaticPhotoCard.js';
+import { normalizeScale } from '../utils.js';
+
+export { normalizeScale };
 
 const THREE = (typeof AFRAME !== 'undefined' && AFRAME.THREE) || (typeof window !== 'undefined' && window.THREE);
 
@@ -359,26 +362,6 @@ if (typeof AFRAME !== 'undefined') {
       }
     }
   });
-}
-
-/**
- * Normalize scale helper
- */
-export function normalizeScale(value) {
-  if (value === undefined || value === null || value === '') {
-    return '1 1 1';
-  }
-  if (typeof value === 'number' && isFinite(value)) {
-    return `${value} ${value} ${value}`;
-  }
-  if (typeof value === 'string') {
-    const parts = value.trim().split(/\s+/).map(Number);
-    if (parts.length >= 1 && parts.every((n) => isFinite(n) && n > 0)) {
-      const [x, y = x, z = x] = parts;
-      return `${x} ${y} ${z}`;
-    }
-  }
-  return '1 1 1';
 }
 
 export default 'swt-gaze-hotspot';

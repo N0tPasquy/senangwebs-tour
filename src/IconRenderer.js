@@ -120,9 +120,14 @@ export class IconRenderer {
             }
           });
 
-          // Convert SVG to data URL
+          // Convert SVG to data URL safely without deprecated unescape
           const svgString = new XMLSerializer().serializeToString(svgClone);
-          const dataUrl = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgString)));
+          const bytes = new TextEncoder().encode(svgString);
+          let binary = '';
+          for (let i = 0; i < bytes.length; i++) {
+            binary += String.fromCharCode(bytes[i]);
+          }
+          const dataUrl = 'data:image/svg+xml;base64,' + btoa(binary);
           
           // Cache the result
           this.iconCache.set(cacheKey, dataUrl);

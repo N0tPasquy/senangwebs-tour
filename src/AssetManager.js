@@ -147,14 +147,20 @@ export class AssetManager {
       videoEl.addEventListener('loadeddata', () => {
         this.loadedAssets.set(id, videoEl);
         resolve(videoEl);
-      });
+      }, { once: true });
 
       videoEl.addEventListener('error', (err) => {
         console.error(`Failed to load video asset: ${url}`, err);
         reject(err);
-      });
+      }, { once: true });
 
       this.assetsEl.appendChild(videoEl);
+
+      // Handle synchronous or already cached completion
+      if (videoEl.readyState >= 2) {
+        this.loadedAssets.set(id, videoEl);
+        resolve(videoEl);
+      }
     });
   }
 
