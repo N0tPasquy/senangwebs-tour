@@ -1,0 +1,9 @@
+services:
+  swt-editor:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: senangwebs-tour-editor
+    restart: unless-stopped
+    ports:
+      - "${PORT:-8089}:80"
