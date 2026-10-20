@@ -2,7 +2,7 @@
 
 This guide explains how to build your own custom tour editor using the SWT editor components (`swt-editor.js`).
 
-![SenangWebs Tour Preview](https://raw.githubusercontent.com/a-hakim/senangwebs-tour/master/swt_preview1.png)
+![SenangWebs Tour Preview](docs/images/editor-view-gaze-image.png)
 
 ## Overview
 
@@ -24,6 +24,10 @@ Both modes provide the same functionality but differ in setup complexity and fle
 | **Configuration** | HTML attributes                    | JavaScript options                 |
 | **Best For**      | Quick prototypes, simple editors   | Complex integrations, custom logic |
 | **Example**       | `examples/editor-declarative.html` | `examples/editor-simple.html`      |
+
+> [!TIP]
+> **Looking to run the complete Visual Editor instantly?**  
+> Run the pre-configured Docker setup: `docker compose up -d` and open `http://localhost:8089`. See [README.md](README.md#-quick-start--running-the-project) for full deployment instructions.
 
 ## Quick Start
 
@@ -235,6 +239,8 @@ editor.on(EditorEvents.PREVIEW_SCENE_CHANGE, (e) => {
 
 ### Custom Scene Management
 
+<img src="docs/images/editor-scene.png" width="230" align="right" alt="Scene Properties Sidebar" />
+
 ```javascript
 // Add a scene programmatically
 const sceneData = {
@@ -248,12 +254,18 @@ sceneManager.addScene(sceneData);
 editor.render(); // Update UI
 ```
 
+<br clear="both" />
+
 ### Custom Hotspot Placement
 
 The editor supports three distinct hotspot action types designed for hands-free VR headset viewing:
 
 #### 1. Gaze Navigation (`gazeNavigate`)
+
+<img src="docs/images/editor-gaze-hotspot.png" width="230" align="right" alt="Gaze Hotspot Sidebar" />
+
 Hands-free VR navigation with icon: holding the crosshair on the hotspot displays an animated countdown ring that automatically triggers navigation upon timer completion.
+
 ```javascript
 const gazeHotspot = {
   id: "hotspot-gaze-1",
@@ -275,8 +287,15 @@ const gazeHotspot = {
 editor.addHotspot(gazeHotspot);
 ```
 
+<br clear="both" />
+
 #### 2. Gaze Image Hotspot (`gazeImage`)
 Hands-free VR navigation using a custom uploaded image instead of an icon. As the user gazes at the hotspot, the photo smoothly scales up over the duration to fill the entire view before transitioning seamlessly into the next scene.
+
+| Sidebar Settings | In-Scene 3D View (16:9) |
+| :---: | :---: |
+| <img src="docs/images/editor-gaze-image.png" width="230" alt="Gaze Image Configuration" /> | <img src="docs/images/editor-view-gaze-image.png" width="550" alt="Gaze Image 3D View" /> |
+
 ```javascript
 const gazeImageHotspot = {
   id: "hotspot-gaze-img-1",
@@ -311,6 +330,10 @@ Embeds photos in 3D space respecting their original aspect ratio. Designed for h
   ```
 - **Hands-Free Close**: Holding gaze focus on the top-right 'X' icon for 2 seconds (or clicking it) closes the card and restores the original photo *to its initial state*. Looking away before 2 seconds cancels the close countdown.
 
+| Sidebar Settings | In-Scene 3D Card View (16:9) |
+| :---: | :---: |
+| <img src="docs/images/editor-static-image.png" width="230" alt="Static Photo Configuration" /> | <img src="docs/images/editor-view-static-image.png" width="550" alt="In-Scene 3D Card View" /> |
+
 ```javascript
 const photoHotspot = {
   id: "hotspot-photo-1",
@@ -334,6 +357,8 @@ editor.addHotspot(photoHotspot);
 ```
 
 ### Background Audio Management
+
+<img src="docs/images/editor-tour.png" width="230" align="right" alt="Tour Settings Panel" />
 
 The editor provides a built-in workflow for ambient background audio loops:
 
