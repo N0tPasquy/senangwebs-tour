@@ -36,6 +36,9 @@
     "editor"
   ],
   "author": "a-hakim",
+  "contributors": [
+    "N0tPasquy"
+  ],
   "license": "MIT",
   "devDependencies": {
     "@rollup/plugin-json": "^6.1.0",

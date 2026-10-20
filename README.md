@@ -258,4 +258,5 @@ Subscribe to tour events on the `<a-scene>` element using `tour.addEventListener
 
 ## 📄 License
 
-This project is open-source software licensed under the [MIT License](LICENSE.md).
+This project is open-source software licensed under the [MIT License](LICENSE.md).  
+Based on the original project by [A. Hakim](https://github.com/bookklik-technologies/senangwebs-tour), with enhancements and Docker integration by [N0tPasquy](https://github.com/N0tPasquy).
